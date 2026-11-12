@@ -1,13 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Stethoscope, Search, UserCheck, ShieldAlert, CheckCircle2, AlertTriangle, FileText, ChevronRight, Activity, Clock, PenTool, Monitor, Radio } from 'lucide-react';
+import {
+  Stethoscope, Search, UserCheck, ShieldAlert, CheckCircle2, AlertTriangle,
+  FileText, ChevronRight, Activity, Clock, PenTool, Monitor, Radio,
+  Calendar, Video, MessageSquare, PlusCircle, Check, X
+} from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ReportViewerModal } from '../components/ReportViewerModal';
 import { BedsideTelemetryMonitor } from '../components/BedsideTelemetryMonitor';
+import { Appointment } from '../types';
 
-export const DoctorDashboardPage: React.FC = () => {
+interface DoctorDashboardProps {
+  onNavigate?: (tab: string) => void;
+}
+
+export const DoctorDashboardPage: React.FC<DoctorDashboardProps> = ({ onNavigate }) => {
   const { user } = useAuth();
   const [patients, setPatients] = useState<any[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
   const [patientDossier, setPatientDossier] = useState<any | null>(null);
@@ -25,11 +35,15 @@ export const DoctorDashboardPage: React.FC = () => {
   const fetchPatients = async () => {
     try {
       setLoading(true);
-      const data = await api.getDoctorPatients(searchQuery);
-      setPatients(data);
+      const [pts, appts] = await Promise.all([
+        api.getDoctorPatients(searchQuery),
+        api.getDoctorAppointments().catch(() => [])
+      ]);
+      setPatients(pts);
+      setAppointments(appts || []);
       // Automatically select first patient if none selected
-      if (!selectedPatientId && data.length > 0) {
-        loadPatientDossier(data[0].id);
+      if (!selectedPatientId && pts.length > 0) {
+        loadPatientDossier(pts[0].id);
       }
     } catch (e) {
       console.error('Failed to load patient roster', e);
@@ -41,6 +55,15 @@ export const DoctorDashboardPage: React.FC = () => {
   useEffect(() => {
     fetchPatients();
   }, [searchQuery]);
+
+  const handleUpdateAppointment = async (id: number, status: string) => {
+    try {
+      await api.updateAppointmentStatus(id, status);
+      setAppointments(prev => prev.map(a => a.id === id ? { ...a, status } : a));
+    } catch (e: any) {
+      alert(`Failed to update appointment: ${e.message}`);
+    }
+  };
 
   const loadPatientDossier = async (patientId: number) => {
     try {
@@ -99,7 +122,25 @@ export const DoctorDashboardPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {onNavigate && (
+            <>
+              <button
+                onClick={() => onNavigate('prescriptions')}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-500/20 transition"
+              >
+                <FileText className="w-4 h-4" />
+                <span>Issue Prescription</span>
+              </button>
+              <button
+                onClick={() => onNavigate('ecg-predict')}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg shadow-cyan-500/20 transition"
+              >
+                <Activity className="w-4 h-4" />
+                <span>54-Feature AI Model</span>
+              </button>
+            </>
+          )}
           <button
             onClick={() => setShowMonitorModal(!showMonitorModal)}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 transition"
@@ -109,6 +150,113 @@ export const DoctorDashboardPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Doctor Action Quick Ribbon */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <button
+          onClick={() => onNavigate?.('prescriptions')}
+          className="p-3.5 rounded-2xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700/80 hover:border-amber-500/50 transition flex items-center gap-3 text-left group"
+        >
+          <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition">
+            <FileText className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-xs font-bold text-white group-hover:text-amber-300 transition">Prescription Manager</div>
+            <div className="text-[10px] text-slate-400">Issue & download PDF</div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => onNavigate?.('appointments')}
+          className="p-3.5 rounded-2xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700/80 hover:border-indigo-500/50 transition flex items-center gap-3 text-left group"
+        >
+          <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition">
+            <Calendar className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-xs font-bold text-white group-hover:text-indigo-300 transition">Consultations</div>
+            <div className="text-[10px] text-slate-400">{appointments.length} active sessions</div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => onNavigate?.('ecg-predict')}
+          className="p-3.5 rounded-2xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700/80 hover:border-cyan-500/50 transition flex items-center gap-3 text-left group"
+        >
+          <div className="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition">
+            <Activity className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-xs font-bold text-white group-hover:text-cyan-300 transition">Extra Trees ML</div>
+            <div className="text-[10px] text-slate-400">54 ECG parameters</div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => onNavigate?.('comms')}
+          className="p-3.5 rounded-2xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700/80 hover:border-teal-500/50 transition flex items-center gap-3 text-left group"
+        >
+          <div className="w-9 h-9 rounded-xl bg-teal-500/20 text-teal-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition">
+            <MessageSquare className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-xs font-bold text-white group-hover:text-teal-300 transition">Direct Messaging</div>
+            <div className="text-[10px] text-slate-400">Chat & video calls</div>
+          </div>
+        </button>
+      </div>
+
+      {/* Incoming Appointment Requests Section */}
+      {appointments.filter(a => a.status === 'pending').length > 0 && (
+        <div className="p-5 rounded-3xl bg-slate-900/90 border border-indigo-500/40 shadow-xl space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-indigo-400" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-white font-mono">
+                Pending Consultation Requests ({appointments.filter(a => a.status === 'pending').length})
+              </h3>
+            </div>
+            <span className="text-[11px] text-amber-400 font-mono">Action Required</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {appointments.filter(a => a.status === 'pending').map((app) => (
+              <div key={app.id} className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2 text-xs">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <span className="font-bold text-white">{app.patient_name || `Patient #${app.patient_id}`}</span>
+                    <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                      {new Date(app.appointment_date).toLocaleString()} • {app.appointment_type}
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    PENDING
+                  </span>
+                </div>
+                {app.reason && (
+                  <p className="text-slate-300 text-[11px] bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+                    Reason: {app.reason}
+                  </p>
+                )}
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    onClick={() => handleUpdateAppointment(app.id, 'rejected')}
+                    className="px-3 py-1.5 rounded-xl text-[11px] font-semibold bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition flex items-center gap-1"
+                  >
+                    <X className="w-3.5 h-3.5" /> Reject
+                  </button>
+                  <button
+                    onClick={() => handleUpdateAppointment(app.id, 'approved')}
+                    className="px-3 py-1.5 rounded-xl text-[11px] font-bold bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/20 transition flex items-center gap-1"
+                  >
+                    <Check className="w-3.5 h-3.5" /> Approve Request
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Bedside Telemetry Monitor Section if Toggled */}
       {showMonitorModal && (

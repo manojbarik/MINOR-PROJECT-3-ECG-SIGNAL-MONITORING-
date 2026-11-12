@@ -23,6 +23,11 @@ yarn-error.log*
 *.db-wal
 *.db-shm
 *.sqlite3
+database/*.db
+database/*.db-wal
+database/*.db-shm
+!database/.gitkeep
+!database/README.md
 static/reports/*.pdf
 !static/reports/.gitkeep
 

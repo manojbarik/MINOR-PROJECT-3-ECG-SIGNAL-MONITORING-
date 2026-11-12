@@ -103,7 +103,7 @@ export const ChatAssistantPage: React.FC = () => {
           </div>
           <a
             href={`tel:${activeEmergencyAlert.hotline_number || '112'}`}
-            className="flex items-center gap-2 bg-white text-red-600 font-bold px-4 py-2 rounded-xl text-xs shadow hover:bg-red-50 transition shrink-0"
+            className="flex items-center gap-2 bg-red-500/20 text-red-300 border border-red-500/40 font-bold px-4 py-2 rounded-xl text-xs shadow hover:bg-red-500/30 transition shrink-0"
           >
             <PhoneCall className="w-4 h-4 animate-bounce" />
             Call Emergency ({activeEmergencyAlert.hotline_number || '112'})

@@ -58,6 +58,11 @@ class Patient(Base):
     recent_illness_or_fever = Column(Boolean, default=False)
     recent_illness_details = Column(String(255), nullable=True)
     
+    # Registration & profile details
+    gender = Column(String(20), nullable=True) # 'Male', 'Female', 'Other'
+    address = Column(Text, nullable=True)
+    assessment_complete = Column(Boolean, default=False)
+    
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     
@@ -73,6 +78,9 @@ class Patient(Base):
     consents = relationship("UserConsent", back_populates="patient", cascade="all, delete-orphan")
     appointments = relationship("Appointment", back_populates="patient", cascade="all, delete-orphan")
     devices = relationship("Device", back_populates="patient", cascade="all, delete-orphan")
+    ecg_predictions = relationship("ECGPrediction", back_populates="patient", cascade="all, delete-orphan")
+    prescriptions = relationship("Prescription", back_populates="patient", cascade="all, delete-orphan")
+    medical_uploads = relationship("MedicalUpload", back_populates="patient", cascade="all, delete-orphan")
 
 # 3. Doctors
 class Doctor(Base):
@@ -83,13 +91,22 @@ class Doctor(Base):
     license_number = Column(String(100), unique=True, nullable=False)
     specialty = Column(String(100), default="Cardiology")
     hospital_affiliation = Column(String(255), nullable=True)
+    hospital_name = Column(String(255), nullable=True)
+    qualification = Column(String(255), nullable=True)
+    experience_years = Column(Integer, nullable=True)
+    phone_number = Column(String(50), nullable=True)
     consultation_phone = Column(String(50), nullable=True)
-    verified = Column(Boolean, default=True)
+    profile_picture = Column(String(255), nullable=True)
+    availability = Column(JSON, nullable=True)
+    consultation_fee = Column(Float, nullable=True)
+    is_approved = Column(Boolean, default=False)
+    verified = Column(Boolean, default=False)
     created_at = Column(DateTime, default=utc_now)
     
     user = relationship("User", back_populates="doctor_profile")
     reviews = relationship("DoctorReview", back_populates="doctor")
     appointments = relationship("Appointment", back_populates="doctor")
+    prescriptions = relationship("Prescription", back_populates="doctor")
 
 # 4. Medical_History
 class MedicalHistory(Base):
@@ -256,6 +273,7 @@ class HealthReport(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    prediction_id = Column(Integer, ForeignKey("ecg_predictions.id"), nullable=True)
     report_reference_code = Column(String(100), unique=True, index=True, nullable=False)
     title = Column(String(255), default="PATIENT HEALTH ANALYSIS REPORT")
     report_data = Column(JSON, nullable=False) # Structured full report JSON
@@ -267,6 +285,7 @@ class HealthReport(Base):
     generated_at = Column(DateTime, default=utc_now)
     
     patient = relationship("Patient", back_populates="reports")
+    prediction = relationship("ECGPrediction", back_populates="reports")
     reviews = relationship("DoctorReview", back_populates="report", cascade="all, delete-orphan")
 
 # 13. Doctor_Reviews
@@ -416,4 +435,76 @@ class EducationProgress(Base):
     
     user = relationship("User", back_populates="education_progress")
     module = relationship("EducationModule", back_populates="progress")
+
+# 22. ECG_Predictions (Machine Learning Extra Trees Inference)
+class ECGPrediction(Base):
+    __tablename__ = "ecg_predictions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    
+    predicted_class = Column(String(50), nullable=False, index=True) # 'ARR', 'AFF', 'CHF', 'NSR'
+    condition_name = Column(String(100), nullable=False) # 'Arrhythmia', 'Atrial Fibrillation', etc.
+    confidence_score = Column(Float, nullable=False) # Max probability
+    probabilities = Column(JSON, nullable=False) # {"AFF": 0.0, "ARR": 0.98, "CHF": 0.01, "NSR": 0.01}
+    feature_values = Column(JSON, nullable=False) # 54 named numerical features
+    
+    model_name = Column(String(100), default="Extra Trees Classifier")
+    model_version = Column(String(50), default="v1.0-champion")
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utc_now)
+    
+    patient = relationship("Patient", back_populates="ecg_predictions")
+    user = relationship("User")
+    reports = relationship("HealthReport", back_populates="prediction", cascade="all, delete-orphan")
+
+# 23. Prescriptions
+class Prescription(Base):
+    __tablename__ = "prescriptions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False, index=True)
+    doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=False, index=True)
+    appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True)
+    
+    patient_condition = Column(Text, nullable=False)
+    clinical_assessment = Column(Text, nullable=False)
+    medicines = Column(JSON, nullable=False) # list of dicts: [{name, dosage, frequency, duration, instructions}]
+    lifestyle_recommendations = Column(Text, nullable=True)
+    diet_recommendations = Column(Text, nullable=True)
+    exercise_recommendations = Column(Text, nullable=True)
+    followup_date = Column(String(50), nullable=True)
+    doctor_notes = Column(Text, nullable=True)
+    pdf_filename = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+    
+    patient = relationship("Patient", back_populates="prescriptions")
+    doctor = relationship("Doctor", back_populates="prescriptions")
+    appointment = relationship("Appointment")
+
+# 24. Medical Uploads
+class MedicalUpload(Base):
+    __tablename__ = "medical_uploads"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False, index=True)
+    uploader_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    filename = Column(String(255), nullable=False)
+    original_filename = Column(String(255), nullable=False)
+    file_type = Column(String(50), nullable=False) # 'pdf', 'image', 'ecg_csv', 'json'
+    file_path = Column(String(500), nullable=False)
+    upload_purpose = Column(String(100), default="initial_assessment")
+    is_processed = Column(Boolean, default=False)
+    ecg_prediction_id = Column(Integer, ForeignKey("ecg_predictions.id"), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utc_now)
+    
+    patient = relationship("Patient", back_populates="medical_uploads")
+    uploader = relationship("User")
+    prediction = relationship("ECGPrediction")
+
+
 

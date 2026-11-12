@@ -49,7 +49,7 @@ export const EmergencyBanner: React.FC<EmergencyBannerProps> = ({ alert, onDismi
           {isRed && (
             <a
               href={`tel:${alert.hotline_number || '112'}`}
-              className="flex items-center gap-2 bg-white text-red-600 font-bold px-4 py-2 rounded-lg text-sm shadow hover:bg-red-50 transition transform active:scale-95"
+              className="flex items-center gap-2 bg-white/20 text-white border border-white/40 font-bold px-4 py-2 rounded-lg text-sm shadow hover:bg-white/30 transition transform active:scale-95"
             >
               <PhoneCall className="w-4 h-4 animate-pulse" />
               Call Emergency ({alert.hotline_number || '112'})

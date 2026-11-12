@@ -10,12 +10,14 @@ from app.models import (
     User, Patient, Doctor, MedicalHistory, Medication, Allergy,
     HeartRateReading, Symptom, AIAnalysis, HealthRecommendation,
     EmergencyAlert, HealthReport, UserConsent, AuditLog,
-    Appointment, Message, Notification, Device, EducationModule, EducationProgress
+    Appointment, Message, Notification, Device, EducationModule, EducationProgress,
+    ECGPrediction
 )
 from app.auth import get_password_hash
 from app.clinical_engine import ClinicalRuleEngine
 from app.ai_advisor import AIAdvisorEngine
 from app.report_generator import HealthReportGenerator
+from app.ml.predictor import get_real_sample_features, predict_ecg
 import os
 
 def utc_now():
@@ -384,7 +386,7 @@ async def seed_database(db: AsyncSession):
     next_week = utc_now() + timedelta(days=5)
     
     appt1 = Appointment(
-        patient_id=patient.id, # Johnathan Miller
+        patient_id=p1.id, # Johnathan Miller
         doctor_id=doctor.id,   # Dr. Sarah Chen
         appointment_date=tomorrow.replace(hour=10, minute=0, second=0),
         appointment_type="telehealth",
@@ -415,16 +417,16 @@ async def seed_database(db: AsyncSession):
     # --- SEED MESSAGES ---
     msg1 = Message(
         sender_id=doc_user.id,
-        recipient_id=user.id,
-        patient_id=patient.id,
+        recipient_id=p1_user.id,
+        patient_id=p1.id,
         subject="Cardiology Telemetry Review & Follow-up",
         content="Hello Johnathan, I reviewed your latest 7-day resting trend (average 74 BPM). Your blood pressure and pulse remain well-controlled on Lisinopril. Please continue logging morning seated readings before taking your medication.",
         is_read=True
     )
     msg2 = Message(
-        sender_id=user.id,
+        sender_id=p1_user.id,
         recipient_id=doc_user.id,
-        patient_id=patient.id,
+        patient_id=p1.id,
         subject="Re: Cardiology Telemetry Review & Follow-up",
         content="Thank you Dr. Chen! I felt a brief flutter on Thursday morning after coffee, but resting pulse was 72. I will discuss this during our telehealth appointment tomorrow.",
         is_read=False
@@ -434,21 +436,21 @@ async def seed_database(db: AsyncSession):
     # --- SEED NOTIFICATIONS ---
     notifs = [
         Notification(
-            user_id=user.id,
+            user_id=p1_user.id,
             category="appointment",
             title="Consultation Tomorrow at 10:00 AM",
             message="Your scheduled telehealth consultation with Dr. Sarah Chen, MD is confirmed for tomorrow at 10:00 AM.",
             priority="medium"
         ),
         Notification(
-            user_id=user.id,
+            user_id=p1_user.id,
             category="message",
             title="New Clinical Message from Dr. Sarah Chen",
             message="Dr. Sarah Chen replied regarding your 7-day resting trend review.",
             priority="medium"
         ),
         Notification(
-            user_id=user.id,
+            user_id=p1_user.id,
             category="report",
             title="Clinical Health Analysis Compiled",
             message="Formal clinical health dossier CPR-2026-JM01 is ready for viewing and PDF download.",
@@ -474,7 +476,7 @@ async def seed_database(db: AsyncSession):
     # --- SEED DEVICES ---
     devs = [
         Device(
-            patient_id=patient.id,
+            patient_id=p1.id,
             device_name="Apple Watch Ultra 2",
             device_type="smartwatch",
             serial_number="APPL-W992-01",
@@ -484,7 +486,7 @@ async def seed_database(db: AsyncSession):
             firmware_version="watchOS 10.4.1"
         ),
         Device(
-            patient_id=patient.id,
+            patient_id=p1.id,
             device_name="OMRON Evolv Wireless Upper Arm BP Monitor",
             device_type="blood_pressure",
             serial_number="OMR-EV-8841",
@@ -707,18 +709,47 @@ Never ignore acute symptoms. While pulse monitors provide valuable longitudinal 
 
     # User Education Progress for Johnathan Miller
     db.add(EducationProgress(
-        user_id=user.id,
+        user_id=doc_user.id,
         module_id=edu_modules[0].id,
         completed=True,
         quiz_score=100
     ))
     db.add(EducationProgress(
-        user_id=user.id,
+        user_id=doc_user.id,
         module_id=edu_modules[1].id,
         completed=True,
         quiz_score=100
     ))
 
+
+    # Seed Sample Machine Learning ECG Predictions
+    demo_predictions = [
+        {"patient": p1, "condition": "ARR", "notes": "Baseline 54-feature screening showing conduction delay."},
+        {"patient": p_ath, "condition": "NSR", "notes": "Athletic cardiovascular checkup; standard rhythm."},
+        {"patient": p_cp, "condition": "CHF", "notes": "Acute assessment with ventricular strain metrics."},
+        {"patient": p_tach, "condition": "AFF", "notes": "Irregular rhythm with rapid ventricular response."}
+    ]
+
+    for dp in demo_predictions:
+        sample_f = get_real_sample_features(dp["condition"])
+        if sample_f:
+            try:
+                res = predict_ecg(sample_f)
+                pred_rec = ECGPrediction(
+                    patient_id=dp["patient"].id,
+                    user_id=dp["patient"].user_id,
+                    predicted_class=res["predicted_class"],
+                    condition_name=res["condition_name"],
+                    confidence_score=res["confidence_score"],
+                    probabilities=res["probabilities"],
+                    feature_values=res["feature_values"],
+                    model_name=res["model_name"],
+                    model_version=res["model_version"],
+                    notes=dp["notes"]
+                )
+                db.add(pred_rec)
+            except Exception as e:
+                print(f"[!] Warning seeding ECG prediction: {e}")
 
     # Initial Audit Log
     db.add(AuditLog(

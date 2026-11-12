@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Activity, ShieldCheck, HeartPulse, Stethoscope, AlertTriangle, ArrowRight, Lock, Brain, FileCheck, Users, Sparkles, Zap, Box, Monitor, Radio } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
 import { InteractiveHeart3D } from '../components/InteractiveHeart3D';
 import { LiveECGMonitorCanvas } from '../components/LiveECGMonitorCanvas';
 
@@ -9,13 +8,7 @@ interface LandingPageProps {
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
-  const { quickDemoLogin } = useAuth();
   const [heroBpm, setHeroBpm] = useState(74);
-
-  const handleStartDemo = async (email: string) => {
-    await quickDemoLogin(email);
-    onNavigate('dashboard');
-  };
 
   return (
     <div className="space-y-16 pb-16">
@@ -51,7 +44,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
             {/* CTA Buttons */}
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <button
-                onClick={() => handleStartDemo('patient@cardiopulse.health')}
+                onClick={() => onNavigate('login')}
                 className="flex items-center gap-2 bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-600 hover:from-teal-400 hover:to-cyan-400 text-white font-bold px-5 py-3 rounded-xl shadow-lg shadow-teal-500/30 transition transform active:scale-95 text-xs sm:text-sm"
               >
                 <span>Launch Patient Dashboard</span>
@@ -75,10 +68,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
               </button>
 
               <button
-                onClick={async () => {
-                  await quickDemoLogin('doctor@cardiopulse.health');
-                  onNavigate('doctor');
-                }}
+                onClick={() => onNavigate('login')}
                 className="flex items-center gap-2 bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 font-semibold px-4 py-3 rounded-xl transition text-xs sm:text-sm"
               >
                 <Stethoscope className="w-4 h-4 text-teal-400" />
@@ -219,10 +209,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
             <div>
               <div className="inline-flex items-center gap-1.5 text-xs font-mono text-teal-400 uppercase tracking-wider mb-1">
                 <Radio className="w-3.5 h-3.5" />
-                Live Patient Profiles
+                Clinical Profiles
               </div>
-              <h3 className="text-xl sm:text-2xl font-black">Interactive Clinical Demonstration Cases</h3>
-              <p className="text-xs text-slate-400 mt-1">Test edge cases, physiological nuances, and emergency triage handling</p>
+              <h3 className="text-xl sm:text-2xl font-black">Explore Clinical Demonstration Cases</h3>
+              <p className="text-xs text-slate-400 mt-1">Sign in to access any role-based patient case or doctor portal</p>
             </div>
             <span className="text-xs font-mono bg-teal-500/20 text-teal-300 border border-teal-500/30 px-3 py-1.5 rounded-full font-bold">
               8 Seeded Clinical Cohorts
@@ -231,20 +221,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {[
-              { title: 'Normal Adult (Hypertensive on ACE-I)', sub: 'Johnathan, 46y • Lisinopril • Rest 74 BPM', email: 'patient@cardiopulse.health', badge: 'GREEN', col: 'text-emerald-400' },
-              { title: 'Endurance Athlete', sub: 'Marcus, 28y • Sinus Bradycardia 48 BPM normal', email: 'athlete@cardiopulse.health', badge: 'GREEN (ATH)', col: 'text-emerald-400' },
-              { title: 'Pediatric Child', sub: 'Leo, 8y • Resting HR 94 BPM (age-appropriate)', email: 'pediatric@cardiopulse.health', badge: 'GREEN (PALS)', col: 'text-emerald-400' },
-              { title: 'Pregnant Patient (28w)', sub: 'Elena, 31y • Resting 92 BPM physiological rise', email: 'pregnant@cardiopulse.health', badge: 'GREEN (PREG)', col: 'text-emerald-400' },
-              { title: 'Chest Pain Emergency Demo', sub: 'David, 54y • HR 78 BPM normal BUT Chest Pain', email: 'chestpain@cardiopulse.health', badge: 'RED (EMERGENCY)', col: 'text-red-400' },
-              { title: 'Attending Cardiologist', sub: 'Dr. Sarah Chen, MD • Clinician sign-off & roster', email: 'doctor@cardiopulse.health', badge: 'DOCTOR PORTAL', col: 'text-cyan-400' }
+              { title: 'Normal Adult (Hypertensive on ACE-I)', sub: 'Johnathan, 46y • Lisinopril • Rest 74 BPM', badge: 'GREEN', col: 'text-emerald-400' },
+              { title: 'Endurance Athlete', sub: 'Marcus, 28y • Sinus Bradycardia 48 BPM normal', badge: 'GREEN (ATH)', col: 'text-emerald-400' },
+              { title: 'Pediatric Child', sub: 'Leo, 8y • Resting HR 94 BPM (age-appropriate)', badge: 'GREEN (PALS)', col: 'text-emerald-400' },
+              { title: 'Pregnant Patient (28w)', sub: 'Elena, 31y • Resting 92 BPM physiological rise', badge: 'GREEN (PREG)', col: 'text-emerald-400' },
+              { title: 'Chest Pain Emergency Demo', sub: 'David, 54y • HR 78 BPM normal BUT Chest Pain', badge: 'RED (EMERGENCY)', col: 'text-red-400' },
+              { title: 'Attending Cardiologist', sub: 'Dr. Sarah Chen, MD • Clinician sign-off & roster', badge: 'DOCTOR PORTAL', col: 'text-cyan-400' }
             ].map((c, i) => (
               <button
                 key={i}
-                onClick={async () => {
-                  await quickDemoLogin(c.email);
-                  onNavigate(c.email.includes('doctor') ? 'doctor' : 'dashboard');
-                }}
-                className="text-left p-4 rounded-2xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 transition flex flex-col justify-between group"
+                onClick={() => onNavigate('login')}
+                className="text-left p-4 rounded-2xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 hover:border-teal-500/40 transition flex flex-col justify-between group"
               >
                 <div>
                   <div className="flex items-center justify-between">
@@ -254,12 +241,28 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
                   <p className="text-[11px] text-slate-400 mt-1">{c.sub}</p>
                 </div>
                 <span className="text-[10px] text-teal-400 font-medium mt-3 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                  Launch Test Case <ArrowRight className="w-3 h-3" />
+                  Sign In to Access <ArrowRight className="w-3 h-3" />
                 </span>
               </button>
             ))}
           </div>
 
+          {/* Sign In / Register CTA */}
+          <div className="mt-6 pt-5 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              onClick={() => onNavigate('login')}
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-slate-950 font-black text-sm shadow-lg shadow-teal-500/20 transition flex items-center gap-2"
+            >
+              <Lock className="w-4 h-4" />
+              Sign In to CardioPulse
+            </button>
+            <button
+              onClick={() => onNavigate('register')}
+              className="px-6 py-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700 hover:border-teal-500/50 text-slate-200 hover:text-white font-semibold text-sm transition"
+            >
+              Create New Account
+            </button>
+          </div>
         </div>
       </section>
 

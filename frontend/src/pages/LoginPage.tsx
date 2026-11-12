@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Activity, Lock, Mail, ArrowRight, ShieldCheck, Stethoscope } from 'lucide-react';
+import { Activity, Lock, Mail, ArrowRight, ArrowLeft, ShieldCheck, Stethoscope, AlertTriangle, Clock, User, Sparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 interface LoginPageProps {
@@ -7,7 +7,7 @@ interface LoginPageProps {
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
-  const { login, quickDemoLogin } = useAuth();
+  const { login } = useAuth();
   const [email, setEmail] = useState('patient@cardiopulse.health');
   const [password, setPassword] = useState('PatientPass123!');
   const [loading, setLoading] = useState(false);
@@ -19,7 +19,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
     setLoading(true);
     try {
       await login(email, password);
-      onNavigate(email.startsWith('doc') ? 'doctor' : 'dashboard');
+      if (email === 'manojbarik84998@gmail.com' || email.includes('admin')) {
+        onNavigate('admin');
+      } else if (email.startsWith('doc') || email.includes('doctor')) {
+        onNavigate('doctor');
+      } else {
+        onNavigate('dashboard');
+      }
     } catch (err: any) {
       setError(err.message || 'Authentication failed. Please verify credentials.');
     } finally {
@@ -27,11 +33,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
     }
   };
 
-  const handleDemoSelect = async (demoEmail: string, demoRole: string) => {
+  const handleDemoSelect = async (demoEmail: string, demoRole: string, customPwd?: string) => {
     setLoading(true);
+    setError(null);
     try {
-      await quickDemoLogin(demoEmail);
-      onNavigate(demoRole === 'doctor' ? 'doctor' : 'dashboard');
+      await login(demoEmail, customPwd || (demoRole === 'doctor' ? 'DoctorPass123!' : (demoRole === 'admin' ? 'Manoj@123' : 'PatientPass123!')));
+      if (demoRole === 'admin') {
+        onNavigate('admin');
+      } else if (demoRole === 'doctor') {
+        onNavigate('doctor');
+      } else {
+        onNavigate('dashboard');
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -39,52 +52,97 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
     }
   };
 
+  const isPendingApproval = error && (
+    error.toLowerCase().includes('pending') ||
+    error.toLowerCase().includes('approval') ||
+    error.toLowerCase().includes('approved')
+  );
+
   return (
-    <div className="max-w-md mx-auto my-12 px-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
+    <div className="relative max-w-md mx-auto my-12 px-4">
+      {/* Background ambient lighting */}
+      <div className="absolute -top-16 -left-16 w-64 h-64 bg-teal-500/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-16 -right-16 w-64 h-64 bg-cyan-500/15 rounded-full blur-3xl pointer-events-none" />
+
+      <div className="relative glass-panel bg-slate-900/90 rounded-3xl border border-slate-700/80 shadow-2xl shadow-black/80 overflow-hidden backdrop-blur-2xl">
         
+        {/* Navigation Bar */}
+        <div className="flex items-center justify-between px-6 pt-5 pb-2 border-b border-slate-800/60 bg-slate-950/40">
+          <button
+            type="button"
+            onClick={() => onNavigate('landing')}
+            className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-teal-300 transition font-mono group"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-1 text-teal-400" />
+            <span>← Back to Home</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate('register')}
+            className="text-xs text-teal-400 hover:text-teal-300 font-mono transition"
+          >
+            Create Account →
+          </button>
+        </div>
+
         {/* Card Header */}
-        <div className="bg-gradient-to-r from-navy-900 to-slate-900 text-white p-6 text-center">
-          <div className="w-12 h-12 rounded-xl bg-teal-500/20 border border-teal-500/30 flex items-center justify-center mx-auto mb-3 text-teal-300">
-            <Activity className="w-6 h-6 animate-pulse" />
+        <div className="p-8 pb-6 text-center border-b border-slate-800/80 bg-gradient-to-b from-slate-800/40 to-transparent">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-teal-500/20 via-cyan-500/15 to-emerald-500/20 border border-teal-500/40 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-teal-500/15 text-teal-400">
+            <Activity className="w-7 h-7 animate-pulse" />
           </div>
-          <h2 className="text-xl font-bold">Sign In to CardioPulse</h2>
-          <p className="text-xs text-slate-400 mt-1">Clinical Decision Support & Vitals Portal</p>
+          <h2 className="text-2xl font-black text-white tracking-tight">Sign In to CardioPulse</h2>
+          <p className="text-xs font-mono text-teal-400 mt-1 uppercase tracking-wider">Multi-Role Clinical Decision Support Portal</p>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-7 space-y-4">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-xs p-3 rounded-lg">
-              {error}
+            <div className={`p-4 rounded-2xl text-xs flex items-start gap-3 ${
+              isPendingApproval
+                ? 'bg-amber-950/60 border border-amber-500/40 text-amber-200'
+                : 'bg-red-950/60 border border-red-500/40 text-red-200'
+            }`}>
+              {isPendingApproval ? (
+                <Clock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+              )}
+              <div>
+                {isPendingApproval && <strong className="block font-bold mb-0.5 text-amber-300">Physician Approval Pending:</strong>}
+                <span className="leading-relaxed">{error}</span>
+              </div>
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Email Address</label>
-            <div className="relative">
-              <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+            <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">
+              Email Address
+            </label>
+            <div className="relative group">
+              <Mail className="w-4 h-4 text-slate-400 group-focus-within:text-teal-400 transition absolute left-3.5 top-3" />
               <input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                className="w-full pl-10 pr-4 py-2.5 text-xs bg-slate-950/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition shadow-inner"
                 placeholder="name@cardiopulse.health"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Password</label>
-            <div className="relative">
-              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+            <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">
+              Password
+            </label>
+            <div className="relative group">
+              <Lock className="w-4 h-4 text-slate-400 group-focus-within:text-teal-400 transition absolute left-3.5 top-3" />
               <input
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                className="w-full pl-10 pr-4 py-2.5 text-xs bg-slate-950/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition shadow-inner font-mono"
                 placeholder="••••••••"
               />
             </div>
@@ -93,60 +151,27 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-2.5 rounded-lg text-xs shadow-md transition disabled:opacity-50"
+            className="w-full bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-slate-950 font-black py-3 rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-teal-500/25 transition disabled:opacity-50 flex items-center justify-center gap-2 mt-2"
           >
-            {loading ? 'Authenticating...' : 'Sign In'}
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <Activity className="w-4 h-4 animate-spin" /> Authenticating...
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                Sign In to Portal <ArrowRight className="w-4 h-4" />
+              </span>
+            )}
           </button>
 
-          {/* Quick Demo Shortcuts */}
-          <div className="pt-4 border-t border-slate-100">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-2 text-center">
-              One-Click Clinical Demo Accounts
-            </span>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleDemoSelect('patient@cardiopulse.health', 'patient')}
-                className="bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs py-2 px-3 rounded-lg font-medium text-left transition flex items-center justify-between"
-              >
-                <span>Johnathan (Patient)</span>
-                <span className="w-2 h-2 rounded-full bg-teal-500"></span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDemoSelect('doctor@cardiopulse.health', 'doctor')}
-                className="bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs py-2 px-3 rounded-lg font-medium text-left transition flex items-center justify-between"
-              >
-                <span>Dr. Chen (Cardiologist)</span>
-                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDemoSelect('chestpain@cardiopulse.health', 'patient')}
-                className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 text-xs py-2 px-3 rounded-lg font-medium text-left transition flex items-center justify-between"
-              >
-                <span>Chest Pain Triage</span>
-                <span className="w-2 h-2 rounded-full bg-red-500"></span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDemoSelect('athlete@cardiopulse.health', 'patient')}
-                className="bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs py-2 px-3 rounded-lg font-medium text-left transition flex items-center justify-between"
-              >
-                <span>Athlete (Bradycardia)</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              </button>
-            </div>
-          </div>
-
-          <div className="text-center text-xs text-slate-500 pt-2">
+          <div className="text-center text-xs text-slate-400 pt-5 border-t border-slate-800/80">
             Don't have an account?{' '}
             <button
               type="button"
               onClick={() => onNavigate('register')}
-              className="text-teal-600 hover:underline font-semibold"
+              className="text-teal-400 hover:text-teal-300 font-bold underline transition ml-1"
             >
-              Register Patient Profile
+              Create Account (Doctor or Patient)
             </button>
           </div>
         </form>

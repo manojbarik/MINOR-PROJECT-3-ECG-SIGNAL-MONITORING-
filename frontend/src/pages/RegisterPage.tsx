@@ -1,505 +1,539 @@
 import React, { useState } from 'react';
-import { UserPlus, ArrowLeft, ShieldCheck, Check } from 'lucide-react';
+import { UserPlus, ArrowLeft, ArrowRight, ShieldCheck, Check, Stethoscope, User, Clock, AlertCircle, CheckCircle, Info } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../services/api';
+import { registerDoctor, registerPatient } from '../services/api';
 
 interface RegisterPageProps {
   onNavigate: (tab: string) => void;
 }
 
 export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigate }) => {
-  const { register } = useAuth();
-  const [step, setStep] = useState(1);
+  const { login } = useAuth();
+  const [selectedRole, setSelectedRole] = useState<'patient' | 'doctor'>('patient');
+  const [doctorSubmitted, setDoctorSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Form State
-  const [formData, setFormData] = useState({
-    // Account
-    email: '',
-    password: '',
+  // Doctor Form State
+  const [doctorData, setDoctorData] = useState({
     full_name: '',
-    role: 'patient',
-    // Personal
-    age: '',
-    sex: 'Male',
-    height_cm: '',
-    weight_kg: '',
-    phone: '',
-    emergency_contact_name: '',
-    emergency_contact_phone: '',
-    emergency_contact_relation: '',
-    // Medical History
-    has_heart_disease: false,
-    high_blood_pressure: false,
-    low_blood_pressure: false,
-    diabetes: false,
-    thyroid_disorder: false,
-    previous_cardiac_event: false,
-    respiratory_condition: false,
-    other_conditions: '',
-    // Lifestyle
-    smoking_habit: 'non-smoker',
-    alcohol_consumption: 'occasional',
-    physical_activity_level: 'moderate',
-    sleep_duration_hours: 7.0,
-    stress_level: 'moderate',
-    caffeine_intake: 'moderate',
-    daily_exercise_habits: '',
-    // Special Circumstances
-    is_pregnant: false,
-    pregnancy_trimester: 1,
-    recent_illness_or_fever: false,
-    // Medication
-    current_medication_name: '',
-    current_medication_dose: '',
-    // Consent
-    consent_data_processing: true,
-    consent_ai_analysis: true
+    email: '',
+    phone_number: '',
+    password: '',
+    specialization: 'Cardiology',
+    qualification: '',
+    experience_years: 5,
+    hospital_name: '',
+    consultation_fee: 100,
+    availability_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+    availability_hours: '09:00 AM - 05:00 PM'
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target;
-    if (type === 'checkbox') {
-      const checked = (e.target as HTMLInputElement).checked;
-      setFormData(prev => ({ ...prev, [name]: checked }));
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
-    }
-  };
+  // Patient Form State
+  const [patientData, setPatientData] = useState({
+    full_name: '',
+    email: '',
+    phone_number: '',
+    password: '',
+    age: 35,
+    gender: 'Male' as 'Male' | 'Female' | 'Other',
+    address: '',
+    has_heart_disease: false,
+    high_blood_pressure: false,
+    diabetes: false,
+    previous_cardiac_event: false,
+    medical_notes: ''
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleDoctorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
     try {
-      // 1. Create User
-      await register({
-        email: formData.email,
-        password: formData.password,
-        full_name: formData.full_name,
-        role: formData.role
+      await registerDoctor({
+        full_name: doctorData.full_name,
+        email: doctorData.email,
+        phone_number: doctorData.phone_number,
+        password: doctorData.password,
+        specialization: doctorData.specialization,
+        qualification: doctorData.qualification,
+        experience_years: Number(doctorData.experience_years),
+        hospital_name: doctorData.hospital_name,
+        consultation_fee: Number(doctorData.consultation_fee),
+        availability: {
+          days: doctorData.availability_days,
+          hours: doctorData.availability_hours
+        }
       });
-
-      // 2. Update Patient Profile Details
-      await api.updatePatientProfile({
-        age: formData.age ? Number(formData.age) : undefined,
-        sex: formData.sex,
-        height_cm: formData.height_cm ? Number(formData.height_cm) : undefined,
-        weight_kg: formData.weight_kg ? Number(formData.weight_kg) : undefined,
-        phone: formData.phone,
-        emergency_contact_name: formData.emergency_contact_name,
-        emergency_contact_phone: formData.emergency_contact_phone,
-        emergency_contact_relation: formData.emergency_contact_relation,
-        smoking_habit: formData.smoking_habit,
-        alcohol_consumption: formData.alcohol_consumption,
-        physical_activity_level: formData.physical_activity_level,
-        sleep_duration_hours: Number(formData.sleep_duration_hours),
-        stress_level: formData.stress_level,
-        caffeine_intake: formData.caffeine_intake,
-        daily_exercise_habits: formData.daily_exercise_habits,
-        is_pregnant: formData.is_pregnant,
-        pregnancy_trimester: formData.is_pregnant ? Number(formData.pregnancy_trimester) : undefined,
-        recent_illness_or_fever: formData.recent_illness_or_fever
-      });
-
-      // 3. Update Medical History
-      await api.updateMedicalHistory({
-        has_heart_disease: formData.has_heart_disease,
-        high_blood_pressure: formData.high_blood_pressure,
-        low_blood_pressure: formData.low_blood_pressure,
-        diabetes: formData.diabetes,
-        thyroid_disorder: formData.thyroid_disorder,
-        previous_cardiac_event: formData.previous_cardiac_event,
-        respiratory_condition: formData.respiratory_condition,
-        other_conditions: formData.other_conditions
-      });
-
-      // 4. Add medication if specified
-      if (formData.current_medication_name) {
-        await api.addMedication({
-          name: formData.current_medication_name,
-          dosage: formData.current_medication_dose,
-          affects_heart_rate: false
-        });
-      }
-
-      onNavigate('dashboard');
+      setDoctorSubmitted(true);
     } catch (err: any) {
-      setError(err.message || 'Registration failed.');
+      setError(err.message || 'Doctor registration failed. Please verify fields.');
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <div className="max-w-2xl mx-auto my-8 px-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
-        
-        {/* Header */}
-        <div className="bg-gradient-to-r from-navy-900 to-slate-900 text-white p-6">
-          <button
-            onClick={() => onNavigate('login')}
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white mb-3 transition"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Back to Sign In
-          </button>
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <UserPlus className="w-5 h-5 text-teal-400" />
-            Patient Clinical Registration
-          </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            Complete your comprehensive health intake for contextual AI decision support.
+  const handlePatientSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    try {
+      await registerPatient({
+        full_name: patientData.full_name,
+        email: patientData.email,
+        phone_number: patientData.phone_number,
+        password: patientData.password,
+        age: Number(patientData.age),
+        gender: patientData.gender,
+        address: patientData.address,
+        medical_history: {
+          has_heart_disease: patientData.has_heart_disease,
+          high_blood_pressure: patientData.high_blood_pressure,
+          diabetes: patientData.diabetes,
+          previous_cardiac_event: patientData.previous_cardiac_event,
+          notes: patientData.medical_notes
+        }
+      });
+
+      // Auto login patient so they can submit their assessment immediately
+      await login(patientData.email, patientData.password);
+      // Navigate to required assessment upload step
+      onNavigate('assessment-upload');
+    } catch (err: any) {
+      setError(err.message || 'Patient registration failed. Please check your details.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (doctorSubmitted) {
+    return (
+      <div className="relative max-w-xl mx-auto my-12 px-4">
+        <div className="absolute -top-16 -left-16 w-64 h-64 bg-cyan-500/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative glass-panel bg-slate-900/90 rounded-3xl border border-cyan-500/40 shadow-2xl p-8 text-center backdrop-blur-2xl">
+          <div className="w-16 h-16 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-cyan-500/20">
+            <CheckCircle className="w-9 h-9" />
+          </div>
+          <h2 className="text-2xl font-black text-white tracking-tight">Doctor Registration Submitted</h2>
+          <p className="text-xs sm:text-sm text-slate-300 mt-2 leading-relaxed">
+            Thank you, Dr. <span className="text-cyan-300 font-bold">{doctorData.full_name}</span>! Your credentials have been registered into the institutional verification registry.
           </p>
 
-          {/* Stepper */}
-          <div className="flex items-center justify-between mt-4 text-xs font-semibold text-slate-400 border-t border-navy-800 pt-3">
-            <span className={step >= 1 ? 'text-teal-300' : ''}>1. Account & Personal</span>
-            <span className={step >= 2 ? 'text-teal-300' : ''}>2. Medical History</span>
-            <span className={step >= 3 ? 'text-teal-300' : ''}>3. Lifestyle & Review</span>
+          <div className="bg-amber-950/60 border border-amber-500/40 rounded-2xl p-4 my-6 text-left text-xs text-amber-200 space-y-2">
+            <div className="font-bold flex items-center gap-2 text-amber-300 font-mono uppercase tracking-wider text-[11px]">
+              <Clock className="w-4 h-4 text-amber-400" />
+              Administrative Verification Status: PENDING APPROVAL
+            </div>
+            <p className="leading-relaxed text-slate-300">
+              Under medical governance compliance protocols, newly registered physician accounts must be reviewed and approved by the Super Administrator (<span className="text-amber-300 font-mono">manojbarik84998@gmail.com</span>) before clinical portal access is granted.
+            </p>
+            <p className="text-[11px] text-slate-400 font-mono pt-1 border-t border-amber-500/20">
+              Registered Physician Email: <strong className="text-white">{doctorData.email}</strong>
+            </p>
+          </div>
+
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => onNavigate('login')}
+              className="bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-400 hover:to-teal-400 text-slate-950 font-black py-3 px-8 rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-cyan-500/25 transition"
+            >
+              Return to Sign In Portal
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative max-w-2xl mx-auto my-8 px-4">
+      {/* Ambient background glows */}
+      <div className="absolute -top-16 -left-16 w-72 h-72 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-16 -right-16 w-72 h-72 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+
+      <div className="relative glass-panel bg-slate-900/90 rounded-3xl border border-slate-700/80 shadow-2xl shadow-black/80 overflow-hidden backdrop-blur-2xl">
+        
+        {/* Header */}
+        <div className="p-6 sm:p-7 border-b border-slate-800/80 bg-gradient-to-b from-slate-800/40 to-transparent">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-teal-500/20 via-cyan-500/15 to-emerald-500/20 border border-teal-500/40 flex items-center justify-center text-teal-400 shadow-md shadow-teal-500/15">
+                <UserPlus className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-black text-white tracking-tight">Create Healthcare Account</h2>
+                <p className="text-xs font-mono text-teal-400 mt-0.5 uppercase tracking-wider">CardioPulse AI Clinical & Patient Platform</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onNavigate('landing')}
+                className="text-xs font-mono text-slate-400 hover:text-white flex items-center gap-1.5 transition px-3 py-1.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60"
+                title="Return to Home Page"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 text-slate-400" /> Back to Home
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigate('login')}
+                className="text-xs font-mono text-teal-300 hover:text-white flex items-center gap-1.5 transition px-3 py-1.5 rounded-xl bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 text-teal-400" /> Back to Sign In
+              </button>
+            </div>
+          </div>
+
+          {/* Role Selector Tabs */}
+          <div className="grid grid-cols-2 gap-2 mt-6 p-1.5 bg-slate-950/80 rounded-2xl border border-slate-800/80">
+            <button
+              type="button"
+              onClick={() => { setSelectedRole('patient'); setError(null); }}
+              className={`flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition ${
+                selectedRole === 'patient'
+                  ? 'bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 shadow-lg shadow-teal-500/25'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+              }`}
+            >
+              <User className="w-4 h-4" />
+              <span>Patient Registration</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setSelectedRole('doctor'); setError(null); }}
+              className={`flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition ${
+                selectedRole === 'doctor'
+                  ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 shadow-lg shadow-cyan-500/25'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+              }`}
+            >
+              <Stethoscope className="w-4 h-4" />
+              <span>Doctor / Clinician</span>
+            </button>
           </div>
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-xs p-3 rounded-lg">
-              {error}
-            </div>
-          )}
+        {error && (
+          <div className="m-6 mb-0 bg-red-950/60 border border-red-500/40 text-red-200 text-xs p-4 rounded-2xl flex items-start gap-3">
+            <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+            <span className="leading-relaxed">{error}</span>
+          </div>
+        )}
 
-          {/* STEP 1: Account & Personal Information */}
-          {step === 1 && (
-            <div className="space-y-4">
-              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">A. Personal Credentials</h3>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Full Name *</label>
-                  <input
-                    type="text"
-                    required
-                    name="full_name"
-                    value={formData.full_name}
-                    onChange={handleChange}
-                    className="w-full p-2 border border-slate-300 rounded-lg"
-                    placeholder="e.g. Johnathan Miller"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Email Address *</label>
-                  <input
-                    type="email"
-                    required
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    className="w-full p-2 border border-slate-300 rounded-lg"
-                    placeholder="john@example.com"
-                  />
-                </div>
+        {/* Patient Registration Form */}
+        {selectedRole === 'patient' && (
+          <form onSubmit={handlePatientSubmit} className="p-6 sm:p-7 space-y-4">
+            <div className="bg-teal-950/50 border border-teal-500/40 rounded-2xl p-4 text-xs text-teal-200 leading-relaxed flex items-start gap-3">
+              <Info className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-teal-300 font-bold block mb-0.5">Required Clinical Onboarding:</strong>
+                After creating your patient account, you will be guided to upload your medical report or ECG file to complete your baseline heart health assessment before doctor consultation slots unlock.
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">Full Legal Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={patientData.full_name}
+                  onChange={(e) => setPatientData({ ...patientData, full_name: e.target.value })}
+                  placeholder="e.g. Johnathan Miller"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-950/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition shadow-inner"
+                />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Password *</label>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">Email Address *</label>
+                <input
+                  type="email"
+                  required
+                  value={patientData.email}
+                  onChange={(e) => setPatientData({ ...patientData, email: e.target.value })}
+                  placeholder="johnathan@example.com"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-950/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition shadow-inner"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">Phone Number *</label>
+                <input
+                  type="tel"
+                  required
+                  value={patientData.phone_number}
+                  onChange={(e) => setPatientData({ ...patientData, phone_number: e.target.value })}
+                  placeholder="+1 (555) 019-2834"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-950/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition shadow-inner"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">Password (min 8 chars) *</label>
                 <input
                   type="password"
                   required
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  className="w-full text-xs p-2 border border-slate-300 rounded-lg"
-                  placeholder="At least 6 characters"
+                  minLength={8}
+                  value={patientData.password}
+                  onChange={(e) => setPatientData({ ...patientData, password: e.target.value })}
+                  placeholder="••••••••"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-950/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition shadow-inner font-mono"
                 />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3 text-xs">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Age</label>
-                  <input
-                    type="number"
-                    name="age"
-                    value={formData.age}
-                    onChange={handleChange}
-                    className="w-full p-2 border border-slate-300 rounded-lg"
-                    placeholder="e.g. 46"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Biological Sex</label>
-                  <select
-                    name="sex"
-                    value={formData.sex}
-                    onChange={handleChange}
-                    className="w-full p-2 border border-slate-300 rounded-lg"
-                  >
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Phone</label>
-                  <input
-                    type="text"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    className="w-full p-2 border border-slate-300 rounded-lg"
-                    placeholder="+1 (555) 000-0000"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Height (cm)</label>
-                  <input
-                    type="number"
-                    name="height_cm"
-                    value={formData.height_cm}
-                    onChange={handleChange}
-                    className="w-full p-2 border border-slate-300 rounded-lg"
-                    placeholder="178"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Weight (kg)</label>
-                  <input
-                    type="number"
-                    name="weight_kg"
-                    value={formData.weight_kg}
-                    onChange={handleChange}
-                    className="w-full p-2 border border-slate-300 rounded-lg"
-                    placeholder="82"
-                  />
-                </div>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
-                <span className="font-semibold text-slate-700 block">Emergency Contact</span>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <input
-                    type="text"
-                    name="emergency_contact_name"
-                    value={formData.emergency_contact_name}
-                    onChange={handleChange}
-                    className="p-1.5 border border-slate-300 rounded-lg"
-                    placeholder="Contact Name"
-                  />
-                  <input
-                    type="text"
-                    name="emergency_contact_phone"
-                    value={formData.emergency_contact_phone}
-                    onChange={handleChange}
-                    className="p-1.5 border border-slate-300 rounded-lg"
-                    placeholder="Contact Phone"
-                  />
-                  <input
-                    type="text"
-                    name="emergency_contact_relation"
-                    value={formData.emergency_contact_relation}
-                    onChange={handleChange}
-                    className="p-1.5 border border-slate-300 rounded-lg"
-                    placeholder="Relationship"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setStep(2)}
-                className="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-2.5 rounded-lg text-xs shadow transition"
-              >
-                Continue to Medical History
-              </button>
-            </div>
-          )}
-
-          {/* STEP 2: Medical History & Medications */}
-          {step === 2 && (
-            <div className="space-y-4 text-xs">
-              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">B. Clinical History</h3>
-              <p className="text-slate-500 text-[11px]">
-                Check known diagnosed medical conditions. Unchecked boxes indicate negative or unknown history.
-              </p>
-
-              <div className="grid grid-cols-2 gap-2 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" name="high_blood_pressure" checked={formData.high_blood_pressure} onChange={handleChange} className="rounded text-teal-600" />
-                  <span>High Blood Pressure (Hypertension)</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" name="has_heart_disease" checked={formData.has_heart_disease} onChange={handleChange} className="rounded text-teal-600" />
-                  <span>Existing Heart Disease</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" name="previous_cardiac_event" checked={formData.previous_cardiac_event} onChange={handleChange} className="rounded text-teal-600" />
-                  <span>Previous Cardiac Event (MI, Stent)</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" name="diabetes" checked={formData.diabetes} onChange={handleChange} className="rounded text-teal-600" />
-                  <span>Diabetes (Type 1 or 2)</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" name="thyroid_disorder" checked={formData.thyroid_disorder} onChange={handleChange} className="rounded text-teal-600" />
-                  <span>Thyroid Disorder</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" name="respiratory_condition" checked={formData.respiratory_condition} onChange={handleChange} className="rounded text-teal-600" />
-                  <span>Respiratory (Asthma, COPD)</span>
-                </label>
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Other Diagnosed Conditions</label>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">Age *</label>
                 <input
-                  type="text"
-                  name="other_conditions"
-                  value={formData.other_conditions}
-                  onChange={handleChange}
-                  className="w-full p-2 border border-slate-300 rounded-lg"
-                  placeholder="e.g. Mild hyperlipidemia, seasonal allergies"
+                  type="number"
+                  required
+                  min={1}
+                  max={120}
+                  value={patientData.age}
+                  onChange={(e) => setPatientData({ ...patientData, age: Number(e.target.value) })}
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-950/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition shadow-inner font-mono"
                 />
               </div>
 
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                <span className="font-semibold text-slate-700 block">Current Medications & Supplements</span>
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="text"
-                    name="current_medication_name"
-                    value={formData.current_medication_name}
-                    onChange={handleChange}
-                    className="p-1.5 border border-slate-300 rounded-lg"
-                    placeholder="Medication name (e.g. Metoprolol, Lisinopril)"
-                  />
-                  <input
-                    type="text"
-                    name="current_medication_dose"
-                    value={formData.current_medication_dose}
-                    onChange={handleChange}
-                    className="p-1.5 border border-slate-300 rounded-lg"
-                    placeholder="Dosage & frequency (e.g. 50mg daily)"
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setStep(1)}
-                  className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg transition"
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">Gender *</label>
+                <select
+                  value={patientData.gender}
+                  onChange={(e) => setPatientData({ ...patientData, gender: e.target.value as any })}
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-950 border border-slate-700/80 rounded-xl text-white focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition"
                 >
-                  Back
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStep(3)}
-                  className="w-2/3 bg-teal-600 hover:bg-teal-500 text-white font-bold py-2.5 rounded-lg shadow transition"
-                >
-                  Continue to Lifestyle & Consent
-                </button>
+                  <option value="Male" className="bg-slate-900 text-white">Male</option>
+                  <option value="Female" className="bg-slate-900 text-white">Female</option>
+                  <option value="Other" className="bg-slate-900 text-white">Other</option>
+                </select>
               </div>
             </div>
-          )}
 
-          {/* STEP 3: Lifestyle & Review */}
-          {step === 3 && (
-            <div className="space-y-4 text-xs">
-              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">C. Lifestyle & Circumstances</h3>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">Residential Address *</label>
+              <input
+                type="text"
+                required
+                value={patientData.address}
+                onChange={(e) => setPatientData({ ...patientData, address: e.target.value })}
+                placeholder="42 Heartwood Blvd, Suite 2B, Boston MA"
+                className="w-full px-3.5 py-2.5 text-xs bg-slate-950/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition shadow-inner"
+              />
+            </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Physical Activity</label>
-                  <select name="physical_activity_level" value={formData.physical_activity_level} onChange={handleChange} className="w-full p-2 border border-slate-300 rounded-lg">
-                    <option value="sedentary">Sedentary (Little to no exercise)</option>
-                    <option value="light">Light (1-2 days/week)</option>
-                    <option value="moderate">Moderate (3-5 days/week)</option>
-                    <option value="vigorous">Vigorous (6-7 days/week)</option>
-                    <option value="athlete">Trained Endurance Athlete</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Sleep Duration (hrs/night)</label>
-                  <input type="number" step="0.5" name="sleep_duration_hours" value={formData.sleep_duration_hours} onChange={handleChange} className="w-full p-2 border border-slate-300 rounded-lg" />
-                </div>
+            {/* Medical History Section */}
+            <div className="pt-2">
+              <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-2">Pre-existing Medical History</label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                <label className="flex items-center gap-2.5 p-3 bg-slate-950/70 border border-slate-800 hover:border-slate-700 rounded-xl cursor-pointer transition select-none">
+                  <input
+                    type="checkbox"
+                    checked={patientData.has_heart_disease}
+                    onChange={(e) => setPatientData({ ...patientData, has_heart_disease: e.target.checked })}
+                    className="rounded border-slate-700 bg-slate-900 text-teal-500 focus:ring-teal-500/30 w-4 h-4"
+                  />
+                  <span className="text-slate-200 font-medium">Heart Disease</span>
+                </label>
+                <label className="flex items-center gap-2.5 p-3 bg-slate-950/70 border border-slate-800 hover:border-slate-700 rounded-xl cursor-pointer transition select-none">
+                  <input
+                    type="checkbox"
+                    checked={patientData.high_blood_pressure}
+                    onChange={(e) => setPatientData({ ...patientData, high_blood_pressure: e.target.checked })}
+                    className="rounded border-slate-700 bg-slate-900 text-teal-500 focus:ring-teal-500/30 w-4 h-4"
+                  />
+                  <span className="text-slate-200 font-medium">High BP</span>
+                </label>
+                <label className="flex items-center gap-2.5 p-3 bg-slate-950/70 border border-slate-800 hover:border-slate-700 rounded-xl cursor-pointer transition select-none">
+                  <input
+                    type="checkbox"
+                    checked={patientData.diabetes}
+                    onChange={(e) => setPatientData({ ...patientData, diabetes: e.target.checked })}
+                    className="rounded border-slate-700 bg-slate-900 text-teal-500 focus:ring-teal-500/30 w-4 h-4"
+                  />
+                  <span className="text-slate-200 font-medium">Diabetes</span>
+                </label>
+                <label className="flex items-center gap-2.5 p-3 bg-slate-950/70 border border-slate-800 hover:border-slate-700 rounded-xl cursor-pointer transition select-none">
+                  <input
+                    type="checkbox"
+                    checked={patientData.previous_cardiac_event}
+                    onChange={(e) => setPatientData({ ...patientData, previous_cardiac_event: e.target.checked })}
+                    className="rounded border-slate-700 bg-slate-900 text-teal-500 focus:ring-teal-500/30 w-4 h-4"
+                  />
+                  <span className="text-slate-200 font-medium">Prior Cardiac</span>
+                </label>
               </div>
+            </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Smoking Habit</label>
-                  <select name="smoking_habit" value={formData.smoking_habit} onChange={handleChange} className="w-full p-2 border border-slate-300 rounded-lg">
-                    <option value="non-smoker">Non-smoker</option>
-                    <option value="former">Former smoker</option>
-                    <option value="regular">Regular smoker</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Caffeine Intake</label>
-                  <select name="caffeine_intake" value={formData.caffeine_intake} onChange={handleChange} className="w-full p-2 border border-slate-300 rounded-lg">
-                    <option value="none">None</option>
-                    <option value="low">Low (1 cup)</option>
-                    <option value="moderate">Moderate (2-3 cups)</option>
-                    <option value="high">High (4+ cups / Energy drinks)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Stress Level</label>
-                  <select name="stress_level" value={formData.stress_level} onChange={handleChange} className="w-full p-2 border border-slate-300 rounded-lg">
-                    <option value="low">Low</option>
-                    <option value="moderate">Moderate</option>
-                    <option value="high">High</option>
-                    <option value="severe">Severe</option>
-                  </select>
-                </div>
-              </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">Additional Medical Notes / Allergies (Optional)</label>
+              <textarea
+                rows={2}
+                value={patientData.medical_notes}
+                onChange={(e) => setPatientData({ ...patientData, medical_notes: e.target.value })}
+                placeholder="List any drug allergies, prior surgeries, or current medications..."
+                className="w-full px-3.5 py-2.5 text-xs bg-slate-950/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition shadow-inner"
+              />
+            </div>
 
-              {formData.sex === 'Female' && (
-                <div className="p-3 bg-pink-50/50 rounded-xl border border-pink-200">
-                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800">
-                    <input type="checkbox" name="is_pregnant" checked={formData.is_pregnant} onChange={handleChange} className="rounded text-pink-600" />
-                    <span>Currently Pregnant (Physiological Resting HR Modifier)</span>
-                  </label>
-                </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-slate-950 font-black py-3.5 rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-teal-500/25 transition disabled:opacity-50 flex items-center justify-center gap-2 mt-4"
+            >
+              {loading ? 'Creating Patient Account...' : (
+                <>
+                  <span>Register & Proceed to Health Assessment</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
               )}
+            </button>
+          </form>
+        )}
 
-              {/* Consent Management */}
-              <div className="p-3 bg-teal-50 rounded-xl border border-teal-200 space-y-2">
-                <span className="font-semibold text-teal-900 block flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-teal-600" /> Patient Privacy & AI Consent
-                </span>
-                <label className="flex items-start gap-2 text-slate-700 cursor-pointer">
-                  <input type="checkbox" name="consent_data_processing" checked={formData.consent_data_processing} onChange={handleChange} className="mt-0.5 rounded text-teal-600" />
-                  <span>I consent to secure vital sign storage and clinical rule evaluation under healthcare privacy standards.</span>
-                </label>
-                <label className="flex items-start gap-2 text-slate-700 cursor-pointer">
-                  <input type="checkbox" name="consent_ai_analysis" checked={formData.consent_ai_analysis} onChange={handleChange} className="mt-0.5 rounded text-teal-600" />
-                  <span>I consent to AI-assisted educational clinical decision support (CDSS) processing.</span>
-                </label>
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setStep(2)}
-                  className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg transition"
-                >
-                  Back
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-2/3 bg-teal-600 hover:bg-teal-500 text-white font-bold py-2.5 rounded-lg shadow-md transition disabled:opacity-50"
-                >
-                  {loading ? 'Creating Patient Profile...' : 'Complete Registration'}
-                </button>
+        {/* Doctor Registration Form */}
+        {selectedRole === 'doctor' && (
+          <form onSubmit={handleDoctorSubmit} className="p-6 sm:p-7 space-y-4">
+            <div className="bg-cyan-950/50 border border-cyan-500/40 rounded-2xl p-4 text-xs text-cyan-200 leading-relaxed flex items-start gap-3">
+              <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-cyan-300 font-bold block mb-0.5">Cardiologist Credential Verification:</strong>
+                Attending physician profiles are reviewed by the hospital administration. Once approved by the Super Admin, your clinical login credentials become fully active.
               </div>
             </div>
-          )}
 
-        </form>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">Doctor Full Name (with Title) *</label>
+                <input
+                  type="text"
+                  required
+                  value={doctorData.full_name}
+                  onChange={(e) => setDoctorData({ ...doctorData, full_name: e.target.value })}
+                  placeholder="Dr. Sarah Chen, MD"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-950/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 focus:outline-none transition shadow-inner"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">Official Clinical Email *</label>
+                <input
+                  type="email"
+                  required
+                  value={doctorData.email}
+                  onChange={(e) => setDoctorData({ ...doctorData, email: e.target.value })}
+                  placeholder="dr.sarah@cardiopulse.health"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-950/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 focus:outline-none transition shadow-inner"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">Contact Phone Number *</label>
+                <input
+                  type="tel"
+                  required
+                  value={doctorData.phone_number}
+                  onChange={(e) => setDoctorData({ ...doctorData, phone_number: e.target.value })}
+                  placeholder="+1 (555) 302-8812"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-950/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 focus:outline-none transition shadow-inner"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">Password (min 8 chars) *</label>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={doctorData.password}
+                  onChange={(e) => setDoctorData({ ...doctorData, password: e.target.value })}
+                  placeholder="••••••••"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-950/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 focus:outline-none transition shadow-inner font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">Clinical Specialization *</label>
+                <input
+                  type="text"
+                  required
+                  value={doctorData.specialization}
+                  onChange={(e) => setDoctorData({ ...doctorData, specialization: e.target.value })}
+                  placeholder="Interventional Cardiology / Electrophysiology"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-950/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 focus:outline-none transition shadow-inner"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">Medical Qualification *</label>
+                <input
+                  type="text"
+                  required
+                  value={doctorData.qualification}
+                  onChange={(e) => setDoctorData({ ...doctorData, qualification: e.target.value })}
+                  placeholder="MD, FACC, Fellowship in Electrophysiology"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-950/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 focus:outline-none transition shadow-inner"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">Years of Clinical Experience *</label>
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  max={60}
+                  value={doctorData.experience_years}
+                  onChange={(e) => setDoctorData({ ...doctorData, experience_years: Number(e.target.value) })}
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-950/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 focus:outline-none transition shadow-inner font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">Consultation Fee ($ USD)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={doctorData.consultation_fee}
+                  onChange={(e) => setDoctorData({ ...doctorData, consultation_fee: Number(e.target.value) })}
+                  placeholder="100"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-950/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 focus:outline-none transition shadow-inner font-mono"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">Hospital / Clinic Affiliation *</label>
+              <input
+                type="text"
+                required
+                value={doctorData.hospital_name}
+                onChange={(e) => setDoctorData({ ...doctorData, hospital_name: e.target.value })}
+                placeholder="Metropolitan Heart & Vascular Institute"
+                className="w-full px-3.5 py-2.5 text-xs bg-slate-950/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 focus:outline-none transition shadow-inner"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider font-mono mb-1.5">Consultation Timings / Availability</label>
+              <input
+                type="text"
+                value={doctorData.availability_hours}
+                onChange={(e) => setDoctorData({ ...doctorData, availability_hours: e.target.value })}
+                placeholder="Mon-Fri: 09:00 AM - 05:00 PM"
+                className="w-full px-3.5 py-2.5 text-xs bg-slate-950/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 focus:outline-none transition shadow-inner font-mono"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 font-black py-3.5 rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-cyan-500/25 transition disabled:opacity-50 flex items-center justify-center gap-2 mt-4"
+            >
+              {loading ? 'Submitting Application...' : 'Submit Doctor Registration for Approval'}
+            </button>
+          </form>
+        )}
 
       </div>
     </div>

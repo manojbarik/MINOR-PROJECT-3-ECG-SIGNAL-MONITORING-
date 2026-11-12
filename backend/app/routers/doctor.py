@@ -6,7 +6,7 @@ from typing import List, Optional
 import hashlib
 from datetime import datetime, timezone
 from app.database import get_db
-from app.models import Doctor, Patient, User, HealthReport, DoctorReview, HeartRateReading, EmergencyAlert, AuditLog
+from app.models import Doctor, Patient, User, HealthReport, DoctorReview, HeartRateReading, EmergencyAlert, ECGPrediction, AuditLog
 from app.schemas import DoctorReviewCreate, DoctorReviewOut, HealthReportOut
 from app.auth import get_current_user, get_current_doctor
 
@@ -22,15 +22,16 @@ async def list_patients(
     Returns patient roster with alert status and latest vitals for clinician review.
     """
     stmt = (
-        select(Patient)
-        .join(User, Patient.user_id == User.id)
-        .options(
-            selectinload(Patient.user),
-            selectinload(Patient.medical_history),
-            selectinload(Patient.readings),
-            selectinload(Patient.emergency_alerts)
+            select(Patient)
+            .join(User, Patient.user_id == User.id)
+            .options(
+                selectinload(Patient.user),
+                selectinload(Patient.medical_history),
+                selectinload(Patient.readings),
+                selectinload(Patient.emergency_alerts),
+                selectinload(Patient.ecg_predictions)
+            )
         )
-    )
     if query:
         stmt = stmt.where(
             or_(
@@ -48,6 +49,7 @@ async def list_patients(
         latest_r = sorted(p.readings, key=lambda x: x.measurement_time, reverse=True)[0] if p.readings else None
         # Get latest alert
         latest_a = sorted(p.emergency_alerts, key=lambda x: x.created_at, reverse=True)[0] if p.emergency_alerts else None
+        latest_pred = sorted(p.ecg_predictions, key=lambda x: x.created_at, reverse=True)[0] if p.ecg_predictions else None
         
         patient_summaries.append({
             "id": p.id,
@@ -58,14 +60,34 @@ async def list_patients(
             "sex": p.sex,
             "latest_bpm": latest_r.bpm if latest_r else None,
             "latest_reading_time": latest_r.measurement_time.isoformat() if latest_r else None,
+            "latest_ecg_prediction": latest_pred.predicted_class if latest_pred else None,
+            "latest_ecg_confidence": latest_pred.confidence_score if latest_pred else None,
             "alert_level": latest_a.alert_level if latest_a else "GREEN",
             "alert_title": latest_a.alert_title if latest_a else "Normal Baseline",
             "has_heart_disease": p.medical_history.has_heart_disease if p.medical_history else False,
             "high_blood_pressure": p.medical_history.high_blood_pressure if p.medical_history else False,
-            "total_readings": len(p.readings)
+            "total_readings": len(p.readings),
+            "total_predictions": len(p.ecg_predictions)
         })
 
     return patient_summaries
+
+@router.get("/reports", response_model=List[HealthReportOut])
+async def list_doctor_reports(
+    current_doctor: Doctor = Depends(get_current_doctor),
+    db: AsyncSession = Depends(get_db)
+):
+    """Lists all health analysis and ECG classification reports for physician review."""
+    stmt = (
+        select(HealthReport)
+        .options(
+            selectinload(HealthReport.patient).selectinload(Patient.user),
+            selectinload(HealthReport.reviews)
+        )
+        .order_by(desc(HealthReport.generated_at))
+    )
+    res = await db.execute(stmt)
+    return res.scalars().all()
 
 @router.get("/patients/{patient_id}")
 async def get_patient_clinical_dossier(
@@ -183,3 +205,143 @@ async def review_and_sign_report(
         approved=review.approved,
         reviewed_at=review.reviewed_at
     )
+
+@router.get("/profile")
+async def get_own_doctor_profile(
+    current_doctor: Doctor = Depends(get_current_doctor),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Retrieve authenticated doctor's full profile and schedule settings."""
+    return {
+        "id": current_doctor.id,
+        "user_id": current_doctor.user_id,
+        "full_name": current_user.full_name,
+        "email": current_user.email,
+        "license_number": current_doctor.license_number,
+        "specialty": current_doctor.specialty,
+        "qualification": current_doctor.qualification,
+        "experience_years": current_doctor.experience_years,
+        "hospital_name": current_doctor.hospital_name or current_doctor.hospital_affiliation,
+        "phone_number": current_doctor.phone_number or current_doctor.consultation_phone,
+        "profile_picture": current_doctor.profile_picture,
+        "availability": current_doctor.availability,
+        "consultation_fee": current_doctor.consultation_fee,
+        "is_approved": current_doctor.is_approved,
+        "verified": current_doctor.verified
+    }
+
+@router.put("/profile")
+async def update_own_doctor_profile(
+    specialty: Optional[str] = None,
+    qualification: Optional[str] = None,
+    experience_years: Optional[int] = None,
+    hospital_name: Optional[str] = None,
+    phone_number: Optional[str] = None,
+    profile_picture: Optional[str] = None,
+    availability: Optional[dict] = None,
+    consultation_fee: Optional[float] = None,
+    current_doctor: Doctor = Depends(get_current_doctor),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update doctor profile details, consulting hours, and hospital affiliation."""
+    if specialty is not None:
+        current_doctor.specialty = specialty
+    if qualification is not None:
+        current_doctor.qualification = qualification
+    if experience_years is not None:
+        current_doctor.experience_years = experience_years
+    if hospital_name is not None:
+        current_doctor.hospital_name = hospital_name
+        current_doctor.hospital_affiliation = hospital_name
+    if phone_number is not None:
+        current_doctor.phone_number = phone_number
+        current_doctor.consultation_phone = phone_number
+    if profile_picture is not None:
+        current_doctor.profile_picture = profile_picture
+    if availability is not None:
+        current_doctor.availability = availability
+    if consultation_fee is not None:
+        current_doctor.consultation_fee = consultation_fee
+
+    await db.commit()
+    return {"status": "success", "message": "Doctor profile updated successfully"}
+
+# Public directory router
+doctors_public_router = APIRouter(prefix="/doctors", tags=["Doctors Public Directory"])
+
+@doctors_public_router.get("")
+@doctors_public_router.get("/")
+async def list_approved_doctors(
+    specialty: Optional[str] = None,
+    query: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Public listing of all approved doctors available for appointment booking."""
+    stmt = (
+        select(Doctor)
+        .where(Doctor.is_approved == True)
+        .options(selectinload(Doctor.user))
+    )
+    if specialty:
+        stmt = stmt.where(Doctor.specialty.ilike(f"%{specialty}%"))
+    
+    res = await db.execute(stmt)
+    docs = res.scalars().all()
+    
+    results = []
+    for d in docs:
+        if not d.user or not d.user.is_active:
+            continue
+        if query:
+            q_lower = query.lower()
+            name_match = q_lower in d.user.full_name.lower()
+            spec_match = q_lower in (d.specialty or "").lower()
+            hosp_match = q_lower in (d.hospital_name or d.hospital_affiliation or "").lower()
+            if not (name_match or spec_match or hosp_match):
+                continue
+
+        results.append({
+            "id": d.id,
+            "user_id": d.user_id,
+            "full_name": d.user.full_name,
+            "email": d.user.email,
+            "specialty": d.specialty,
+            "qualification": d.qualification,
+            "experience_years": d.experience_years,
+            "hospital_name": d.hospital_name or d.hospital_affiliation,
+            "phone_number": d.phone_number or d.consultation_phone,
+            "profile_picture": d.profile_picture,
+            "availability": d.availability,
+            "consultation_fee": d.consultation_fee or 0.0,
+            "is_approved": d.is_approved
+        })
+    return results
+
+@doctors_public_router.get("/{doctor_id}")
+async def get_doctor_public_profile(
+    doctor_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Public detail view for an approved doctor."""
+    stmt = select(Doctor).where(Doctor.id == doctor_id).options(selectinload(Doctor.user))
+    res = await db.execute(stmt)
+    d = res.scalar_one_or_none()
+    if not d or not d.user:
+        raise HTTPException(status_code=404, detail="Doctor not found")
+    return {
+        "id": d.id,
+        "user_id": d.user_id,
+        "full_name": d.user.full_name,
+        "email": d.user.email,
+        "specialty": d.specialty,
+        "qualification": d.qualification,
+        "experience_years": d.experience_years,
+        "hospital_name": d.hospital_name or d.hospital_affiliation,
+        "phone_number": d.phone_number or d.consultation_phone,
+        "profile_picture": d.profile_picture,
+        "availability": d.availability,
+        "consultation_fee": d.consultation_fee or 0.0,
+        "is_approved": d.is_approved
+    }
+

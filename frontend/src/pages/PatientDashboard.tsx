@@ -17,7 +17,7 @@ interface PatientDashboardProps {
 }
 
 export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }) => {
-  const { user } = useAuth();
+  const { user, assessmentComplete } = useAuth();
   const [metrics, setMetrics] = useState<MetricsSummary | null>(null);
   const [latestAnalysis, setLatestAnalysis] = useState<AIAnalysis | null>(null);
   const [recentReports, setRecentReports] = useState<HealthReport[]>([]);
@@ -58,6 +58,90 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
       {activeAlert && !dismissedAlert && (
         <EmergencyBanner alert={activeAlert} onDismiss={() => setDismissedAlert(true)} />
       )}
+
+      {/* Assessment Requirement Alert */}
+      {!assessmentComplete && (
+        <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-950/70 via-amber-900/40 to-slate-900/90 border border-amber-500/50 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white">Action Required: Complete Your Heart Health Assessment</h3>
+                <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-mono uppercase">
+                  Pending Report
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                To unlock cardiologist appointment scheduling and formal clinical consultations, you must submit your medical report or upload an ECG reading for preliminary AI screening.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigate('assessment-upload')}
+            className="self-start md:self-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition shrink-0 flex items-center gap-1.5"
+          >
+            Upload Report Now
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Healthcare Quick Actions Panel */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <button
+          onClick={() => onNavigate('appointments')}
+          className="p-4 rounded-2xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700/80 hover:border-indigo-500/50 transition flex flex-col items-start gap-2 group text-left"
+        >
+          <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center group-hover:scale-110 transition">
+            <Calendar className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-xs font-bold text-white group-hover:text-indigo-300 transition">Book Doctor</div>
+            <div className="text-[10px] text-slate-400">Consult cardiologists</div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => onNavigate('prescriptions')}
+          className="p-4 rounded-2xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700/80 hover:border-amber-500/50 transition flex flex-col items-start gap-2 group text-left"
+        >
+          <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center group-hover:scale-110 transition">
+            <FileText className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-xs font-bold text-white group-hover:text-amber-300 transition">Prescriptions</div>
+            <div className="text-[10px] text-slate-400">View & download Rx PDF</div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => onNavigate('assessment-upload')}
+          className="p-4 rounded-2xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700/80 hover:border-teal-500/50 transition flex flex-col items-start gap-2 group text-left"
+        >
+          <div className="w-9 h-9 rounded-xl bg-teal-500/20 text-teal-400 flex items-center justify-center group-hover:scale-110 transition">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-xs font-bold text-white group-hover:text-teal-300 transition">Upload Report</div>
+            <div className="text-[10px] text-slate-400">PDF, ECG, PNG, CSV</div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => onNavigate('ecg-predict')}
+          className="p-4 rounded-2xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700/80 hover:border-cyan-500/50 transition flex flex-col items-start gap-2 group text-left"
+        >
+          <div className="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center group-hover:scale-110 transition">
+            <Zap className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-xs font-bold text-white group-hover:text-cyan-300 transition">54-Feature AI Model</div>
+            <div className="text-[10px] text-slate-400">ARR / AFF / CHF / NSR</div>
+          </div>
+        </button>
+      </div>
 
       {/* Welcome & Patient Clinical Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-panel p-6 rounded-3xl border border-slate-700/80 shadow-2xl">

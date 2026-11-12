@@ -21,11 +21,128 @@ import { DeviceManagementPage } from './pages/DeviceManagementPage';
 import { CardiovascularAnalyticsPage } from './pages/CardiovascularAnalyticsPage';
 import { HealthTimelinePage } from './pages/HealthTimelinePage';
 import { BedsideTelemetryMonitor } from './components/BedsideTelemetryMonitor';
-import { ShieldCheck, HeartPulse, Stethoscope, AlertTriangle, Monitor, Radio } from 'lucide-react';
+import { ECGPredictionPage } from './pages/ECGPredictionPage';
+import { PredictionHistoryPage } from './pages/PredictionHistoryPage';
+import { PatientManagementPage } from './pages/PatientManagementPage';
+import { AssessmentUploadPage } from './pages/AssessmentUploadPage';
+import { AppointmentBookingPage } from './pages/AppointmentBookingPage';
+import { PrescriptionPage } from './pages/PrescriptionPage';
+import { NotificationsPage } from './pages/NotificationsPage';
+import { ShieldCheck, HeartPulse, Stethoscope, AlertTriangle, Monitor, Radio, ArrowLeft, Home, ChevronRight, ArrowRight } from 'lucide-react';
+
+const TAB_LABELS: Record<string, string> = {
+  landing: 'Home & Overview',
+  login: 'Sign In',
+  register: 'Registration',
+  dashboard: 'Patient Dashboard',
+  doctor: 'Doctor Clinical Portal',
+  admin: 'Super Admin Console',
+  bedside: 'ICU Bedside Telemetry',
+  monitoring: 'Heart Rate Monitoring',
+  analysis: 'AI Clinical Analysis',
+  'ecg-predict': 'AI Heart Disease Prediction',
+  'prediction-history': 'Prediction History',
+  'patient-management': 'Patient Directory',
+  'assessment-upload': 'Medical Report Upload',
+  appointments: 'Appointments & Consultations',
+  prescriptions: 'Prescription Management',
+  notifications: 'Clinical Notifications',
+  '3d-hub': '3D Cardiovascular Lab',
+  analytics: 'Cardiovascular Analytics',
+  timeline: 'Health Timeline',
+  comms: 'Clinical Messaging & Video',
+  education: 'Patient Education Center',
+  devices: 'Device Management',
+  reports: 'Clinical Reports Archive',
+  chat: 'AI Health Assistant',
+  privacy: 'Settings & Privacy Compliance',
+};
 
 const AppContent: React.FC = () => {
   const { user, isAuthenticated, isLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<string>('landing');
+  const [history, setHistory] = useState<string[]>([]);
+
+  // Default home view based on auth & role
+  const homeTab = !isAuthenticated
+    ? 'landing'
+    : user?.role === 'admin'
+    ? 'admin'
+    : user?.role === 'doctor'
+    ? 'doctor'
+    : 'dashboard';
+
+  // Can the user go back?
+  const canGoBack = activeTab !== homeTab || history.length > 0;
+
+  // Navigate with history tracking
+  const handleNavigate = (newTab: string) => {
+    if (newTab === activeTab) return;
+    setHistory((prev) => [...prev, activeTab]);
+    setActiveTab(newTab);
+    try {
+      window.history.pushState({ tab: newTab }, '', `#${newTab}`);
+    } catch {
+      // ignore
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Step back to previous tab
+  const handleGoBack = () => {
+    if (history.length > 0) {
+      const prevTab = history[history.length - 1];
+      setHistory((prev) => prev.slice(0, -1));
+      setActiveTab(prevTab);
+      try {
+        window.history.pushState({ tab: prevTab }, '', `#${prevTab}`);
+      } catch {
+        // ignore
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      setActiveTab(homeTab);
+      try {
+        window.history.pushState({ tab: homeTab }, '', `#${homeTab}`);
+      } catch {
+        // ignore
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  // Keyboard shortcut listener (Escape or Alt+ArrowLeft)
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+      if (e.key === 'Escape' || (e.altKey && e.key === 'ArrowLeft')) {
+        if (canGoBack) {
+          handleGoBack();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [canGoBack, history, activeTab, homeTab]);
+
+  // Sync with browser's native Back/Forward buttons
+  React.useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state && event.state.tab) {
+        setActiveTab(event.state.tab);
+      } else if (window.location.hash) {
+        const hashTab = window.location.hash.replace('#', '');
+        if (TAB_LABELS[hashTab]) {
+          setActiveTab(hashTab);
+        }
+      } else {
+        setActiveTab(homeTab);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [homeTab]);
 
   // If user signs in, switch default tab based on role
   React.useEffect(() => {
@@ -60,20 +177,67 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col telemetry-bg-cockpit font-sans text-slate-100 selection:bg-teal-500 selection:text-white">
+    <div className="min-h-screen flex flex-col telemetry-bg-cockpit font-sans text-slate-100 selection:bg-teal-500 selection:text-white w-full max-w-full overflow-x-hidden">
 
       {/* Top Clinical Navbar */}
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Navbar activeTab={activeTab} setActiveTab={handleNavigate} onBack={handleGoBack} canGoBack={canGoBack} />
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 overflow-x-hidden">
+
+        {/* Universal Back Navigation & Breadcrumb Header (Visible on every subpage) */}
+        {canGoBack && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-slate-700/80 shadow-xl text-xs animate-in fade-in duration-200 w-full overflow-hidden">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleGoBack}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-teal-500/20 via-cyan-500/15 to-transparent hover:from-teal-500/30 hover:via-cyan-500/25 text-teal-300 hover:text-white border border-teal-500/40 text-xs font-bold tracking-wide transition shadow-sm group active:scale-95"
+                title="Go back to previous screen (Esc)"
+              >
+                <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+                <span>← Back</span>
+                <span className="hidden sm:inline-block text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">Esc</span>
+              </button>
+
+              <div className="h-4 w-px bg-slate-700/80 hidden sm:block" />
+
+              {/* Breadcrumb Path */}
+              <nav className="flex items-center gap-1.5 text-slate-400 font-mono text-[11px]" aria-label="Breadcrumb">
+                <button
+                  type="button"
+                  onClick={() => handleNavigate(homeTab)}
+                  className="hover:text-teal-300 transition flex items-center gap-1 font-semibold"
+                >
+                  <Home className="w-3.5 h-3.5 text-teal-400" />
+                  <span className="hidden sm:inline">{TAB_LABELS[homeTab] || 'Home'}</span>
+                </button>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+                <span className="text-white font-bold truncate max-w-[200px] sm:max-w-xs">
+                  {TAB_LABELS[activeTab] || activeTab}
+                </span>
+              </nav>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleNavigate(homeTab)}
+                className="text-[11px] font-mono text-slate-400 hover:text-teal-300 transition flex items-center gap-1 px-3 py-1.5 rounded-xl hover:bg-slate-800/80 border border-transparent hover:border-slate-700"
+              >
+                <span>Return to Main View</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Tab Routing */}
-        {activeTab === 'landing' && <LandingPage onNavigate={setActiveTab} />}
-        {activeTab === 'login' && <LoginPage onNavigate={setActiveTab} />}
-        {activeTab === 'register' && <RegisterPage onNavigate={setActiveTab} />}
+        {activeTab === 'landing' && <LandingPage onNavigate={handleNavigate} />}
+        {activeTab === 'login' && <LoginPage onNavigate={handleNavigate} />}
+        {activeTab === 'register' && <RegisterPage onNavigate={handleNavigate} />}
 
-        {activeTab === 'dashboard' && <PatientDashboard onNavigate={setActiveTab} />}
+        {activeTab === 'dashboard' && <PatientDashboard onNavigate={handleNavigate} />}
 
         {/* Dedicated ICU Bedside Telemetry Suite */}
         {activeTab === 'bedside' && (
@@ -95,13 +259,13 @@ const AppContent: React.FC = () => {
 
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => setActiveTab('monitoring')}
+                  onClick={() => handleNavigate('monitoring')}
                   className="bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 px-4 py-2 rounded-xl text-xs font-semibold transition"
                 >
                   Record Vitals Reading
                 </button>
                 <button
-                  onClick={() => setActiveTab('3d-hub')}
+                  onClick={() => handleNavigate('3d-hub')}
                   className="bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-400 hover:to-cyan-500 text-white font-bold px-4 py-2 rounded-xl text-xs shadow-lg shadow-teal-500/20 transition"
                 >
                   3D Cardio Lab
@@ -134,21 +298,43 @@ const AppContent: React.FC = () => {
           </div>
         )}
 
-        {activeTab === 'monitoring' && <HeartRateMonitoringPage onNavigate={setActiveTab} />}
-        {activeTab === 'analysis' && <AIAnalysisPage onNavigate={setActiveTab} />}
-        {activeTab === '3d-hub' && <Cardiovascular3DHubPage onNavigate={setActiveTab} />}
-        {activeTab === 'analytics' && <CardiovascularAnalyticsPage onNavigate={setActiveTab} />}
-        {activeTab === 'timeline' && <HealthTimelinePage onNavigate={setActiveTab} />}
+        {activeTab === 'monitoring' && <HeartRateMonitoringPage onNavigate={handleNavigate} />}
+        {activeTab === 'analysis' && <AIAnalysisPage onNavigate={handleNavigate} />}
+        {activeTab === 'ecg-predict' && <ECGPredictionPage onNavigate={handleNavigate} />}
+        {activeTab === 'prediction-history' && <PredictionHistoryPage onNavigate={handleNavigate} />}
+        {activeTab === 'patient-management' && <PatientManagementPage onNavigate={handleNavigate} />}
+        {activeTab === 'assessment-upload' && <AssessmentUploadPage onNavigate={handleNavigate} />}
+        {activeTab === 'appointments' && <AppointmentBookingPage onNavigate={handleNavigate} />}
+        {activeTab === 'prescriptions' && <PrescriptionPage onNavigate={handleNavigate} />}
+        {activeTab === 'notifications' && <NotificationsPage onNavigate={handleNavigate} />}
+        {activeTab === '3d-hub' && <Cardiovascular3DHubPage onNavigate={handleNavigate} />}
+        {activeTab === 'analytics' && <CardiovascularAnalyticsPage onNavigate={handleNavigate} />}
+        {activeTab === 'timeline' && <HealthTimelinePage onNavigate={handleNavigate} />}
         {activeTab === 'comms' && <CommunicationPage />}
         {activeTab === 'education' && <EducationCenterPage />}
         {activeTab === 'devices' && <DeviceManagementPage />}
         {activeTab === 'admin' && <AdminDashboardPage />}
         {activeTab === 'reports' && <ReportsPage />}
         {activeTab === 'chat' && <ChatAssistantPage />}
-        {activeTab === 'doctor' && <DoctorDashboardPage />}
+        {activeTab === 'doctor' && <DoctorDashboardPage onNavigate={handleNavigate} />}
         {activeTab === 'privacy' && <SettingsPrivacyPage />}
 
       </main>
+
+      {/* Floating Action Back Button (Always accessible on all pages even when scrolled down) */}
+      {canGoBack && (
+        <div className="fixed bottom-6 left-6 z-50 animate-in fade-in slide-in-from-bottom-2">
+          <button
+            type="button"
+            onClick={handleGoBack}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-slate-900/95 hover:bg-slate-800 text-teal-300 hover:text-white border border-teal-500/60 shadow-2xl backdrop-blur-2xl text-xs font-black tracking-wider uppercase transition-all duration-200 transform active:scale-90 hover:scale-105 group hover:border-teal-400"
+            title="Go Back to Previous Screen (Shortcut: Esc)"
+          >
+            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+            <span>Back</span>
+          </button>
+        </div>
+      )}
 
       {/* Clinical Disclaimer & Healthcare Footer */}
       <footer className="bg-[#050b18]/90 text-slate-400 text-xs py-8 border-t border-slate-800/80 backdrop-blur-md">

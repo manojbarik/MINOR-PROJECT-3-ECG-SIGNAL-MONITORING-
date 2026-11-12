@@ -72,6 +72,9 @@ export interface PatientProfile {
   pregnancy_trimester?: number;
   recent_illness_or_fever: boolean;
   recent_illness_details?: string;
+  gender?: string;
+  address?: string;
+  assessment_complete?: boolean;
   medical_history?: MedicalHistory;
   medications: Medication[];
   allergies: Allergy[];
@@ -201,13 +204,14 @@ export interface Appointment {
   patient_id: number;
   doctor_id: number;
   doctor_name?: string;
+  doctor_specialty?: string;
   patient_name?: string;
   appointment_date: string;
-  appointment_type: 'in_person' | 'telehealth' | 'urgent_evaluation';
-  status: 'scheduled' | 'completed' | 'cancelled';
+  appointment_type: 'video' | 'chat' | 'phone' | 'in_person' | 'telehealth' | 'urgent_evaluation' | string;
+  status: 'pending' | 'approved' | 'rejected' | 'completed' | 'cancelled' | 'scheduled' | string;
   reason: string;
   clinical_notes?: string;
-  created_at: string;
+  created_at?: string;
 }
 
 export interface AppointmentCreate {
@@ -344,8 +348,11 @@ export interface AdminStats {
   total_analyses: number;
   total_reports: number;
   total_emergency_alerts: number;
+  total_ecg_predictions?: number;
+  prediction_class_distribution?: Record<string, number>;
   alert_distribution: Record<string, number>;
   system_status: string;
+  model_status?: string;
   api_version: string;
   database_connected: boolean;
   uptime_seconds: number;
@@ -355,8 +362,189 @@ export interface DoctorSummary {
   id: number;
   full_name: string;
   email: string;
+  phone_number?: string;
   specialty?: string;
   hospital_affiliation?: string;
   license_number?: string;
 }
+
+// ==============================================================================
+// ECG Machine Learning Prediction Types
+// ==============================================================================
+
+export type ECGClassCode = 'ARR' | 'AFF' | 'CHF' | 'NSR';
+
+export interface ECGClinicalSummary {
+  code: string;
+  name: string;
+  category: string;
+  severity: string;
+  color: string;
+  badge_variant: string;
+  description: string;
+  typical_symptoms: string[];
+  possible_clinical_tests: string[];
+  clinical_followup: string;
+  emergency_warning: string;
+}
+
+export interface ECGPrediction {
+  id: number;
+  patient_id: number;
+  patient_name?: string;
+  patient_code?: string;
+  patient_age?: number;
+  patient_sex?: string;
+  predicted_class: ECGClassCode;
+  condition_name: string;
+  confidence_score: number;
+  probabilities: Record<string, number>;
+  feature_values: Record<string, number>;
+  model_name: string;
+  model_version: string;
+  notes?: string;
+  created_at: string;
+  clinical_summary?: ECGClinicalSummary;
+  report_id?: number;
+  prescription_analysis?: any;
+}
+
+export interface ModelInfo {
+  champion_name: string;
+  n_features: number;
+  classes: string[];
+  test_metrics: {
+    accuracy?: number;
+    macro_precision?: number;
+    macro_recall?: number;
+    macro_f1?: number;
+    balanced_accuracy?: number;
+    macro_roc_auc?: number;
+  };
+  hyperparameters: Record<string, any>;
+  feature_names: string[];
+  preprocessing_metadata: {
+    n_features?: number;
+    imputer_strategy?: string;
+    has_scaler?: boolean;
+  };
+}
+
+export interface CSVParsedSample {
+  sample_index: number;
+  label?: string | null;
+  features: Record<string, number>;
+}
+
+export interface CSVParsedResponse {
+  total_samples: number;
+  samples: CSVParsedSample[];
+}
+
+export interface PatientListItem {
+  id: number;
+  patient_id_code: string;
+  full_name: string;
+  email: string;
+  age?: number;
+  sex?: string;
+  phone?: string;
+  prediction_count: number;
+  latest_prediction_class?: string | null;
+  latest_prediction_date?: string | null;
+  created_at: string;
+}
+
+export interface DoctorRegistrationData {
+  full_name: string;
+  email: string;
+  phone_number: string;
+  password: string;
+  specialization: string;
+  qualification: string;
+  experience_years: number;
+  hospital_name: string;
+  profile_picture?: string;
+  availability?: Record<string, string[]>;
+  consultation_fee?: number;
+}
+
+export interface PatientRegistrationData {
+  full_name: string;
+  email: string;
+  phone_number: string;
+  password: string;
+  age: number;
+  gender: 'Male' | 'Female' | 'Other';
+  address: string;
+  medical_history?: Record<string, unknown>;
+}
+
+export interface Doctor {
+  id: number;
+  user_id: number;
+  full_name: string;
+  email: string;
+  specialty: string;
+  qualification?: string;
+  experience_years?: number;
+  hospital_name?: string;
+  phone_number?: string;
+  profile_picture?: string;
+  availability?: Record<string, string[]>;
+  consultation_fee?: number;
+  is_approved: boolean;
+  verified?: boolean;
+}
+
+export interface AppNotification {
+  id: number;
+  user_id: number;
+  category: string;
+  title: string;
+  message: string;
+  priority: string;
+  is_read: boolean;
+  created_at: string;
+  action_url?: string;
+}
+
+export interface Prescription {
+  id: number;
+  patient_id: number;
+  patient_name?: string;
+  doctor_id: number;
+  doctor_name?: string;
+  doctor_specialty?: string;
+  doctor_hospital?: string;
+  patient_condition: string;
+  clinical_assessment: string;
+  medicines: Array<{name: string; dosage: string; frequency: string; duration: string}>;
+  lifestyle_recommendations?: string;
+  diet_recommendations?: string;
+  exercise_recommendations?: string;
+  followup_date?: string;
+  doctor_notes?: string;
+  pdf_filename?: string;
+  created_at: string;
+}
+
+export interface MedicalUpload {
+  id: number;
+  original_filename: string;
+  filename?: string;
+  file_type: string;
+  upload_purpose: string;
+  is_processed: boolean;
+  notes?: string;
+  created_at: string;
+  prediction?: {
+    predicted_class: string;
+    condition_name: string;
+    confidence_score: number;
+    probabilities: Record<string, number>;
+  };
+}
+
+
 

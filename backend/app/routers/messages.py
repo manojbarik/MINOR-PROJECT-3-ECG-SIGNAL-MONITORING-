@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from typing import List
+from sqlalchemy import or_, and_, desc
+from typing import List, Optional
 
 from app.database import get_db
 from app.models import User, Patient, Doctor, Message, Notification, AuditLog
@@ -129,4 +130,149 @@ async def mark_message_as_read(
     msg.is_read = True
     await db.commit()
     return {"status": "success", "message_id": message_id, "is_read": True}
+
+@router.put("/{message_id}/read")
+async def put_message_as_read(
+    message_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Mark a received message as read (PUT)."""
+    stmt = select(Message).where(Message.id == message_id, Message.recipient_id == current_user.id)
+    res = await db.execute(stmt)
+    msg = res.scalar_one_or_none()
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found.")
+    msg.is_read = True
+    await db.commit()
+    return {"status": "success", "message_id": message_id, "is_read": True}
+
+@router.post("/send")
+async def post_send_message(
+    recipient_id: int = Body(...),
+    content: str = Body(...),
+    subject: Optional[str] = Body(None),
+    patient_id: Optional[int] = Body(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Send message endpoint matching frontend api client."""
+    rec_stmt = select(User).where(User.id == recipient_id)
+    rec_res = await db.execute(rec_stmt)
+    recipient = rec_res.scalar_one_or_none()
+    if not recipient:
+        raise HTTPException(status_code=404, detail="Recipient not found.")
+
+    new_msg = Message(
+        sender_id=current_user.id,
+        recipient_id=recipient_id,
+        patient_id=patient_id,
+        subject=subject or "Clinical Communication",
+        content=content,
+        is_read=False
+    )
+    db.add(new_msg)
+
+    db.add(Notification(
+        user_id=recipient_id,
+        category="message",
+        title=f"New Message from {current_user.full_name}",
+        message=content[:100],
+        priority="medium"
+    ))
+
+    await db.commit()
+    await db.refresh(new_msg)
+    return {
+        "id": new_msg.id,
+        "sender_id": new_msg.sender_id,
+        "recipient_id": new_msg.recipient_id,
+        "content": new_msg.content,
+        "subject": new_msg.subject,
+        "is_read": new_msg.is_read,
+        "created_at": new_msg.created_at.isoformat()
+    }
+
+@router.get("/thread/{other_user_id}")
+async def get_message_thread(
+    other_user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Retrieve full chronological conversation between current user and another user."""
+    stmt = (
+        select(Message)
+        .options(selectinload(Message.sender), selectinload(Message.recipient))
+        .where(
+            or_(
+                and_(Message.sender_id == current_user.id, Message.recipient_id == other_user_id),
+                and_(Message.sender_id == other_user_id, Message.recipient_id == current_user.id),
+            )
+        )
+        .order_by(Message.created_at.asc())
+    )
+    res = await db.execute(stmt)
+    msgs = res.scalars().all()
+
+    # Mark unread incoming messages as read
+    updated = False
+    for m in msgs:
+        if m.recipient_id == current_user.id and not m.is_read:
+            m.is_read = True
+            updated = True
+    if updated:
+        await db.commit()
+
+    return [
+        {
+            "id": m.id,
+            "sender_id": m.sender_id,
+            "sender_name": m.sender.full_name if m.sender else "User",
+            "recipient_id": m.recipient_id,
+            "recipient_name": m.recipient.full_name if m.recipient else "User",
+            "content": m.content,
+            "subject": m.subject,
+            "is_read": m.is_read,
+            "created_at": m.created_at.isoformat() if m.created_at else None
+        }
+        for m in msgs
+    ]
+
+@router.get("/inbox")
+async def get_inbox_conversations(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get active conversation threads grouped by conversation partner."""
+    stmt = (
+        select(Message)
+        .options(selectinload(Message.sender), selectinload(Message.recipient))
+        .where(
+            or_(Message.sender_id == current_user.id, Message.recipient_id == current_user.id)
+        )
+        .order_by(Message.created_at.desc())
+    )
+    res = await db.execute(stmt)
+    msgs = res.scalars().all()
+
+    convos = {}
+    for m in msgs:
+        is_sender = (m.sender_id == current_user.id)
+        partner = m.recipient if is_sender else m.sender
+        partner_id = partner.id if partner else (m.recipient_id if is_sender else m.sender_id)
+
+        if partner_id not in convos:
+            convos[partner_id] = {
+                "other_user_id": partner_id,
+                "other_user_name": partner.full_name if partner else "User",
+                "other_user_role": partner.role if partner else "user",
+                "last_message": m.content,
+                "last_message_time": m.created_at.isoformat() if m.created_at else None,
+                "unread_count": 0
+            }
+        if not is_sender and not m.is_read:
+            convos[partner_id]["unread_count"] += 1
+
+    return list(convos.values())
+
 

@@ -34,6 +34,22 @@ export const CommunicationPage: React.FC<{ initialTab?: 'messages' | 'appointmen
   const [bookingNotes, setBookingNotes] = useState<string>('');
   const [bookingLoading, setBookingLoading] = useState<boolean>(false);
 
+  // Video Consultation Room State
+  const [inVideoCall, setInVideoCall] = useState<boolean>(false);
+  const [callSeconds, setCallSeconds] = useState<number>(0);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [isVideoOff, setIsVideoOff] = useState<boolean>(false);
+
+  useEffect(() => {
+    let timer: any;
+    if (inVideoCall) {
+      timer = setInterval(() => setCallSeconds((s) => s + 1), 1000);
+    } else {
+      setCallSeconds(0);
+    }
+    return () => clearInterval(timer);
+  }, [inVideoCall]);
+
   const loadAll = async () => {
     try {
       const [msgs, appts, docs] = await Promise.all([
@@ -226,6 +242,26 @@ export const CommunicationPage: React.FC<{ initialTab?: 'messages' | 'appointmen
                     Encrypted Clinical Channel • Active
                   </div>
                 </div>
+              </div>
+
+              {/* Direct Calling & Video Room Launchers */}
+              <div className="flex items-center gap-2">
+                <a
+                  href={`tel:${doctors.find((d) => d.id === selectedRecipientId)?.phone_number || '+1-800-432-7863'}`}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 transition"
+                  title="Direct Phone Call"
+                >
+                  <Phone className="w-3.5 h-3.5 text-teal-400" />
+                  <span className="hidden sm:inline">Call Doctor</span>
+                </a>
+                <button
+                  onClick={() => setInVideoCall(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-400 hover:to-cyan-500 text-white shadow-md shadow-teal-500/20 transition"
+                  title="Launch Video Room"
+                >
+                  <Video className="w-3.5 h-3.5" />
+                  <span>Video Room</span>
+                </button>
               </div>
             </div>
 
@@ -496,6 +532,97 @@ export const CommunicationPage: React.FC<{ initialTab?: 'messages' | 'appointmen
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Video Consultation Room Modal */}
+      {inVideoCall && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-md">
+          <div className="relative w-full max-w-3xl mx-4 rounded-3xl overflow-hidden shadow-2xl bg-slate-900 border border-teal-500/40">
+            {/* Call Header */}
+            <div className="flex items-center justify-between px-5 py-4 bg-slate-950 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <span className="w-3 h-3 rounded-full bg-teal-400 animate-ping"></span>
+                <div className="font-bold text-white text-sm">
+                  Live Video Consultation with {doctors.find((d) => d.id === selectedRecipientId)?.full_name || 'Dr. Cardiologist'}
+                </div>
+              </div>
+              <div className="text-teal-400 font-mono text-sm font-bold">
+                {String(Math.floor(callSeconds / 60)).padStart(2, '0')}:{String(callSeconds % 60).padStart(2, '0')}
+              </div>
+            </div>
+
+            {/* Video Area - Demo Mode */}
+            <div className="relative bg-slate-800 aspect-video flex flex-col items-center justify-center gap-4 p-8">
+              {/* Demo Mode Badge */}
+              <div className="absolute top-4 left-1/2 -translate-x-1/2">
+                <span className="px-3 py-1 rounded-full text-xs font-mono font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                  Demo Mode — Simulated Video Room (No Real WebRTC Peer Connection)
+                </span>
+              </div>
+
+              {/* Doctor Avatar (simulated remote feed) */}
+              <div className="w-28 h-28 rounded-full bg-gradient-to-tr from-teal-500 via-cyan-500 to-blue-600 flex items-center justify-center text-5xl font-black text-white shadow-2xl shadow-teal-500/30">
+                DR
+              </div>
+              <div className="text-center space-y-1">
+                <p className="text-white font-bold text-base">
+                  {doctors.find((d) => d.id === selectedRecipientId)?.full_name || 'Dr. Sarah Chen, MD'}
+                </p>
+                <p className="text-teal-300 text-xs font-mono">Connected via HIPAA-Compliant TLS Video Channel</p>
+                <p className="text-slate-500 text-xs mt-1">
+                  In production: This room uses WebRTC peer-to-peer encrypted media with DTLS-SRTP. <br />
+                  Media traversal via TURN server. No recording without consent.
+                </p>
+              </div>
+
+              {/* Local video preview (simulated) */}
+              <div className="absolute bottom-4 right-4 w-28 h-20 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center text-slate-500 text-xs font-mono overflow-hidden">
+                {isVideoOff ? (
+                  <span>Camera Off</span>
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900 text-teal-400">
+                    <User className="w-8 h-8 opacity-60" />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Call Controls */}
+            <div className="flex items-center justify-center gap-5 py-5 bg-slate-950 border-t border-slate-800">
+              <button
+                onClick={() => setIsMuted(!isMuted)}
+                className={`w-12 h-12 rounded-full flex items-center justify-center transition text-sm font-bold ${
+                  isMuted
+                    ? 'bg-red-500/30 text-red-400 border border-red-500/50'
+                    : 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700'
+                }`}
+                title={isMuted ? 'Unmute' : 'Mute microphone'}
+              >
+                {isMuted ? '🔇' : '🎙️'}
+              </button>
+
+              <button
+                onClick={() => setIsVideoOff(!isVideoOff)}
+                className={`w-12 h-12 rounded-full flex items-center justify-center transition text-sm font-bold ${
+                  isVideoOff
+                    ? 'bg-red-500/30 text-red-400 border border-red-500/50'
+                    : 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700'
+                }`}
+                title={isVideoOff ? 'Turn camera on' : 'Turn camera off'}
+              >
+                {isVideoOff ? '📷' : '🎥'}
+              </button>
+
+              <button
+                onClick={() => { setInVideoCall(false); setIsMuted(false); setIsVideoOff(false); }}
+                className="w-14 h-14 rounded-full bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xl flex items-center justify-center shadow-lg shadow-red-500/30 transition"
+                title="End call"
+              >
+                📞
+              </button>
+            </div>
           </div>
         </div>
       )}

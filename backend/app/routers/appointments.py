@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from typing import List
-from datetime import datetime
+from typing import List, Optional, Dict, Any
+from datetime import datetime, timedelta
 
 from app.database import get_db
 from app.models import User, Patient, Doctor, Appointment, Notification, AuditLog
@@ -209,4 +209,238 @@ async def update_appointment(
         clinical_notes=appt.clinical_notes,
         created_at=appt.created_at
     )
+
+# ==============================================================================
+# Patient & Doctor Dedicated Role-Based Endpoints
+# ==============================================================================
+
+@router.post("/request")
+async def request_appointment_endpoint(
+    doctor_id: int = Body(...),
+    appointment_date: str = Body(...),
+    appointment_type: str = Body(default="video"),
+    reason: str = Body(default="Cardiovascular review"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Patient submits appointment request.
+    Verifies that doctor is approved, patient assessment is submitted, and slot is free.
+    """
+    pat_stmt = select(Patient).where(Patient.user_id == current_user.id)
+    pat_res = await db.execute(pat_stmt)
+    patient = pat_res.scalar_one_or_none()
+    if not patient:
+        raise HTTPException(status_code=403, detail="Only registered patients can request appointments.")
+
+    if not patient.assessment_complete:
+        raise HTTPException(
+            status_code=400,
+            detail="Please complete your initial heart health assessment by uploading your medical report before booking an appointment."
+        )
+
+    # Validate target doctor
+    doc_stmt = select(Doctor).options(selectinload(Doctor.user)).where(Doctor.id == doctor_id)
+    doc_res = await db.execute(doc_stmt)
+    doctor = doc_res.scalar_one_or_none()
+    if not doctor or not doctor.is_approved:
+        raise HTTPException(status_code=400, detail="Doctor is not approved or not available for booking.")
+
+    # Parse appointment date
+    try:
+        appt_dt = datetime.fromisoformat(appointment_date)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use ISO format (e.g. 2026-11-15T10:00:00).")
+
+    # Double booking prevention (within 30 minute window)
+    window_start = appt_dt - timedelta(minutes=29)
+    window_end = appt_dt + timedelta(minutes=29)
+    check_stmt = select(Appointment).where(
+        Appointment.doctor_id == doctor.id,
+        Appointment.appointment_date >= window_start,
+        Appointment.appointment_date <= window_end,
+        Appointment.status.in_(["scheduled", "approved", "pending"])
+    )
+    check_res = await db.execute(check_stmt)
+    if check_res.scalars().first():
+        raise HTTPException(
+            status_code=409,
+            detail="The doctor already has an appointment booked around this time slot. Please choose another time."
+        )
+
+    new_appt = Appointment(
+        patient_id=patient.id,
+        doctor_id=doctor.id,
+        appointment_date=appt_dt,
+        appointment_type=appointment_type,
+        status="pending",
+        reason=reason
+    )
+    db.add(new_appt)
+    await db.flush()
+
+    # Send Notification to Doctor
+    if doctor.user_id:
+        db.add(Notification(
+            user_id=doctor.user_id,
+            category="appointment",
+            title="New Appointment Request",
+            message=f"{current_user.full_name} has requested a {appointment_type} consultation on {appt_dt.strftime('%B %d, %Y at %I:%M %p')}.",
+            priority="high"
+        ))
+
+    # Send Notification to Patient
+    db.add(Notification(
+        user_id=current_user.id,
+        category="appointment",
+        title="Appointment Request Submitted",
+        message=f"Your {appointment_type} appointment request with Dr. {doctor.user.full_name} is pending confirmation.",
+        priority="low"
+    ))
+
+    await db.commit()
+    await db.refresh(new_appt)
+
+    return {
+        "status": "success",
+        "appointment_id": new_appt.id,
+        "appointment_date": new_appt.appointment_date.isoformat(),
+        "appointment_type": new_appt.appointment_type,
+        "booking_status": new_appt.status,
+        "message": "Appointment requested successfully. Pending doctor confirmation."
+    }
+
+@router.get("/my")
+async def get_patient_my_appointments(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Retrieve all appointments for currently authenticated patient."""
+    pat_stmt = select(Patient).where(Patient.user_id == current_user.id)
+    pat_res = await db.execute(pat_stmt)
+    patient = pat_res.scalar_one_or_none()
+    if not patient:
+        raise HTTPException(status_code=403, detail="Patient profile not found.")
+
+    stmt = (
+        select(Appointment)
+        .options(selectinload(Appointment.doctor).selectinload(Doctor.user))
+        .where(Appointment.patient_id == patient.id)
+        .order_by(Appointment.appointment_date.desc())
+    )
+    res = await db.execute(stmt)
+    appts = res.scalars().all()
+    return [
+        {
+            "id": a.id,
+            "doctor_id": a.doctor_id,
+            "doctor_name": a.doctor.user.full_name if (a.doctor and a.doctor.user) else "Doctor",
+            "doctor_specialty": a.doctor.specialty if a.doctor else "Cardiology",
+            "appointment_date": a.appointment_date.isoformat() if a.appointment_date else None,
+            "appointment_type": a.appointment_type,
+            "status": a.status,
+            "reason": a.reason,
+            "clinical_notes": a.clinical_notes,
+            "created_at": a.created_at.isoformat() if a.created_at else None
+        }
+        for a in appts
+    ]
+
+@router.get("/doctor")
+async def get_doctor_my_appointments(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Retrieve all appointments for currently authenticated doctor."""
+    doc_stmt = select(Doctor).where(Doctor.user_id == current_user.id)
+    doc_res = await db.execute(doc_stmt)
+    doctor = doc_res.scalar_one_or_none()
+    if not doctor:
+        raise HTTPException(status_code=403, detail="Doctor profile not found.")
+
+    stmt = (
+        select(Appointment)
+        .options(selectinload(Appointment.patient).selectinload(Patient.user))
+        .where(Appointment.doctor_id == doctor.id)
+        .order_by(Appointment.appointment_date.desc())
+    )
+    res = await db.execute(stmt)
+    appts = res.scalars().all()
+    return [
+        {
+            "id": a.id,
+            "patient_id": a.patient_id,
+            "patient_name": a.patient.user.full_name if (a.patient and a.patient.user) else "Patient",
+            "patient_code": a.patient.patient_id_code if a.patient else "",
+            "patient_phone": a.patient.phone if a.patient else None,
+            "appointment_date": a.appointment_date.isoformat() if a.appointment_date else None,
+            "appointment_type": a.appointment_type,
+            "status": a.status,
+            "reason": a.reason,
+            "clinical_notes": a.clinical_notes,
+            "created_at": a.created_at.isoformat() if a.created_at else None
+        }
+        for a in appts
+    ]
+
+@router.put("/{appointment_id}/status")
+async def update_appointment_status_endpoint(
+    appointment_id: int,
+    status: str = Body(..., embed=True),
+    clinical_notes: Optional[str] = Body(None, embed=True),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Doctor or admin approves, rejects, completes, or cancels an appointment."""
+    stmt = (
+        select(Appointment)
+        .options(
+            selectinload(Appointment.patient).selectinload(Patient.user),
+            selectinload(Appointment.doctor).selectinload(Doctor.user)
+        )
+        .where(Appointment.id == appointment_id)
+    )
+    res = await db.execute(stmt)
+    appt = res.scalar_one_or_none()
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found.")
+
+    valid_statuses = ["approved", "rejected", "scheduled", "completed", "cancelled"]
+    if status.lower() not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
+
+    appt.status = status.lower()
+    if clinical_notes is not None:
+        appt.clinical_notes = clinical_notes
+
+    # Send Notification to Patient
+    if appt.patient and appt.patient.user_id:
+        doc_title = f"Dr. {appt.doctor.user.full_name}" if (appt.doctor and appt.doctor.user) else "Your doctor"
+        db.add(Notification(
+            user_id=appt.patient.user_id,
+            category="appointment",
+            title=f"Appointment {status.capitalize()}",
+            message=f"{doc_title} has marked your appointment on {appt.appointment_date.strftime('%B %d')} as {status}.",
+            priority="high" if status in ["approved", "rejected", "cancelled"] else "medium"
+        ))
+
+    await db.commit()
+    return {"status": "success", "appointment_id": appt.id, "new_status": appt.status}
+
+@router.delete("/{appointment_id}")
+async def cancel_appointment_endpoint(
+    appointment_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Cancel an appointment."""
+    stmt = select(Appointment).where(Appointment.id == appointment_id)
+    res = await db.execute(stmt)
+    appt = res.scalar_one_or_none()
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found.")
+    appt.status = "cancelled"
+    await db.commit()
+    return {"status": "success", "message": "Appointment cancelled successfully."}
+
 

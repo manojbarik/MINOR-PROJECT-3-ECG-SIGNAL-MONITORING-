@@ -33,8 +33,8 @@ COPY backend ./backend
 # Copy compiled frontend distribution from Stage 1
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-# Create storage directory for generated PDF health reports
-RUN mkdir -p static/reports
+# Create storage directories for SQLite database and generated PDF health reports
+RUN mkdir -p database static/reports
 
 # Environment defaults
 ENV PYTHONUNBUFFERED=1 \

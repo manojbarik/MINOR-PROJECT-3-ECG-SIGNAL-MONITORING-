@@ -89,6 +89,10 @@ The engine enforces a deterministic four-tier alert matrix benchmarked against A
 
 ```
 ECG Final _Project/
+├── ARCHITECTURE.md              # Complete system architecture & design specification
+├── database/                    # Dedicated SQLite storage (cardiopulse.db)
+│   ├── cardiopulse.db           # Auto-generated SQLite database
+│   └── README.md
 ├── backend/
 │   ├── app/
 │   │   ├── models.py            # 21 SQLAlchemy relational models

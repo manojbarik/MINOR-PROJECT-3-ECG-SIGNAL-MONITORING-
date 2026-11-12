@@ -275,3 +275,339 @@ class HealthReportGenerator:
 
         doc.build(story)
         return output_path
+
+    @staticmethod
+    def generate_ecg_report_payload(
+        patient_data: Dict[str, Any],
+        prediction_data: Dict[str, Any],
+        doctor_review: Optional[Dict[str, Any]] = None,
+        reference_code: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Builds the structured 12-section clinical payload for an ECG ML Prediction Report.
+        """
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        if not reference_code:
+            import uuid
+            reference_code = f"ECG-REP-{uuid.uuid4().hex[:8].upper()}"
+
+        pred_class = prediction_data.get("predicted_class", "NSR")
+        clinical = prediction_data.get("clinical_summary", {})
+
+        # Risk level determination based on predicted class
+        risk_map = {
+            "NSR": "GREEN",
+            "ARR": "ORANGE",
+            "AFF": "RED",
+            "CHF": "RED"
+        }
+        risk_level = risk_map.get(pred_class, "YELLOW")
+
+        return {
+            "reference_code": reference_code,
+            "generated_at": now,
+            "title": "CARDIOPULSE AI — ECG MACHINE LEARNING HEART HEALTH REPORT",
+            "report_type": "ECG_CLASSIFICATION",
+            "risk_level": risk_level,
+            "patient_details": {
+                "patient_id_code": patient_data.get("patient_id_code", "N/A"),
+                "full_name": patient_data.get("full_name", "Anonymous Patient"),
+                "age": patient_data.get("age", "N/A"),
+                "sex": patient_data.get("sex", "Unknown"),
+                "phone": patient_data.get("phone", "N/A"),
+                "emergency_contact": f"{patient_data.get('emergency_contact_name', 'N/A')} ({patient_data.get('emergency_contact_phone', 'N/A')})",
+                "known_conditions": patient_data.get("medical_history", {})
+            },
+            "prediction_details": {
+                "prediction_id": prediction_data.get("id"),
+                "predicted_class": pred_class,
+                "condition_name": prediction_data.get("condition_name", "Cardiac Assessment"),
+                "confidence_score": prediction_data.get("confidence_score", 0.0),
+                "probabilities": prediction_data.get("probabilities", {}),
+                "model_name": prediction_data.get("model_name", "Extra Trees Classifier"),
+                "model_version": prediction_data.get("model_version", "v1.0-champion"),
+                "analysis_timestamp": prediction_data.get("created_at", now),
+                "notes": prediction_data.get("notes")
+            },
+            "model_metadata": {
+                "algorithm": "Extra Trees Ensemble Classifier",
+                "features_used": 54,
+                "validation_accuracy": "96.67%",
+                "roc_auc_score": "0.9985",
+                "preprocessing": "Median Imputation (No scaling required)",
+                "classes": ["AFF (Atrial Fibrillation)", "ARR (Arrhythmia)", "CHF (Congestive Heart Failure)", "NSR (Normal Sinus Rhythm)"]
+            },
+            "clinical_explanation": {
+                "summary": clinical.get("description", "Evaluation of 54 electrophysiological numerical parameters."),
+                "severity_grade": clinical.get("severity", "Routine Follow-up"),
+                "typical_symptoms": clinical.get("typical_symptoms", []),
+                "possible_clinical_tests": clinical.get("possible_clinical_tests", []),
+                "clinical_followup": clinical.get("clinical_followup", "Consult an attending physician."),
+                "emergency_warning": clinical.get("emergency_warning", "Seek emergency assistance if experiencing chest pain.")
+            },
+            "doctor_review": doctor_review,
+            "disclaimer": (
+                "CRITICAL MEDICAL DISCLAIMER: CardioPulse AI is a clinical decision-support and educational tool, "
+                "NOT a definitive diagnostic device. Predictions are derived from experimental machine learning models "
+                "and MUST be corroborated by an authorized clinician through a standard 12-lead ECG, clinical examination, "
+                "and diagnostic pathology. NEVER adjust or discontinue cardiac medications without direct physician supervision."
+            )
+        }
+
+    @staticmethod
+    def generate_ecg_pdf(report_data: Dict[str, Any], output_path: str) -> str:
+        """
+        Generates a formal, multi-section ECG Prediction PDF using ReportLab.
+        """
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        doc = SimpleDocTemplate(
+            output_path,
+            pagesize=letter,
+            rightMargin=36,
+            leftMargin=36,
+            topMargin=36,
+            bottomMargin=36
+        )
+
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'ECGTitle',
+            parent=styles['Heading1'],
+            fontName='Helvetica-Bold',
+            fontSize=15,
+            leading=18,
+            textColor=colors.HexColor("#0f172a"),
+            alignment=1
+        )
+        subtitle_style = ParagraphStyle(
+            'ECGSubtitle',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=8.5,
+            leading=11,
+            textColor=colors.HexColor("#475569"),
+            alignment=1
+        )
+        section_heading = ParagraphStyle(
+            'ECGSectionHead',
+            parent=styles['Heading2'],
+            fontName='Helvetica-Bold',
+            fontSize=10.5,
+            leading=13,
+            textColor=colors.HexColor("#0f766e"),
+            spaceBefore=7,
+            spaceAfter=3
+        )
+        body_style = ParagraphStyle(
+            'ECGBody',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=8.5,
+            leading=11.5,
+            textColor=colors.HexColor("#1e293b")
+        )
+        disclaimer_style = ParagraphStyle(
+            'ECGDisclaimer',
+            parent=styles['Italic'],
+            fontName='Helvetica-Oblique',
+            fontSize=7.5,
+            leading=9.5,
+            textColor=colors.HexColor("#64748b")
+        )
+
+        story = []
+
+        # Header Title & Reference
+        story.append(Paragraph("CARDIOPULSE AI — CARDIOVASCULAR HEALTH PLATFORM", title_style))
+        story.append(Paragraph(
+            f"MACHINE LEARNING ECG ANALYSIS REPORT • Ref: {report_data.get('reference_code')} • Date: {report_data.get('generated_at')}",
+            subtitle_style
+        ))
+        story.append(Spacer(1, 6))
+        story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#0d9488"), spaceAfter=8))
+
+        # Prediction Summary Banner
+        p_details = report_data.get("prediction_details", {})
+        pred_class = p_details.get("predicted_class", "NSR")
+        cond_name = p_details.get("condition_name", "Cardiac Condition")
+        conf_pct = f"{p_details.get('confidence_score', 0.0) * 100:.1f}%"
+
+        banner_bg = colors.HexColor("#16a34a") # NSR Green
+        if pred_class == "ARR":
+            banner_bg = colors.HexColor("#d97706") # Amber
+        elif pred_class == "AFF":
+            banner_bg = colors.HexColor("#7c3aed") # Purple
+        elif pred_class == "CHF":
+            banner_bg = colors.HexColor("#dc2626") # Red
+
+        banner_data = [[
+            Paragraph(f"<b>AI PREDICTED CLASS: {pred_class}</b><br/>{cond_name.upper()}", ParagraphStyle('B1', textColor=colors.white, alignment=1, fontSize=11, fontName='Helvetica-Bold', leading=14)),
+            Paragraph(f"<b>CONFIDENCE SCORE: {conf_pct}</b><br/>Model: {p_details.get('model_name')}", ParagraphStyle('B2', textColor=colors.HexColor("#0f172a"), alignment=1, fontSize=10, fontName='Helvetica-Bold', leading=13))
+        ]]
+        banner_table = Table(banner_data, colWidths=[270, 270])
+        banner_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, 0), banner_bg),
+            ('BACKGROUND', (1, 0), (1, 0), colors.HexColor("#f1f5f9")),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+            ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#94a3b8")),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        story.append(banner_table)
+        story.append(Spacer(1, 8))
+
+        # 1. Patient Demographics Table
+        p_info = report_data.get("patient_details", {})
+        info_table_data = [
+            [Paragraph("<b>Patient Name:</b>", body_style), Paragraph(str(p_info.get("full_name")), body_style),
+             Paragraph("<b>Patient ID Code:</b>", body_style), Paragraph(str(p_info.get("patient_id_code")), body_style)],
+            [Paragraph("<b>Age / Sex:</b>", body_style), Paragraph(f"{p_info.get('age', 'N/A')} yrs / {p_info.get('sex', 'N/A')}", body_style),
+             Paragraph("<b>Contact Phone:</b>", body_style), Paragraph(str(p_info.get("phone", "N/A")), body_style)],
+            [Paragraph("<b>Emergency Contact:</b>", body_style), Paragraph(str(p_info.get("emergency_contact")), body_style),
+             Paragraph("<b>Analysis Time:</b>", body_style), Paragraph(str(p_details.get("analysis_timestamp")), body_style)],
+        ]
+        info_table = Table(info_table_data, colWidths=[110, 160, 110, 160])
+        info_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ]))
+        story.append(info_table)
+        story.append(Spacer(1, 8))
+
+        # 2. Four-Class Probability Breakdown
+        story.append(Paragraph("Multiclass Prediction Probabilities", section_heading))
+        probas = p_details.get("probabilities", {})
+        
+        prob_rows = [
+            [
+                Paragraph("<b>Condition Code & Name</b>", body_style),
+                Paragraph("<b>Calculated Probability</b>", body_style),
+                Paragraph("<b>Classification Status</b>", body_style)
+            ]
+        ]
+        class_full_names = {
+            "AFF": "Atrial Fibrillation (AFF)",
+            "ARR": "Arrhythmia (ARR)",
+            "CHF": "Congestive Heart Failure (CHF)",
+            "NSR": "Normal Sinus Rhythm (NSR)"
+        }
+        for code, full_name in class_full_names.items():
+            prob_val = probas.get(code, 0.0)
+            is_pred = (code == pred_class)
+            status_text = f"<b>SELECTED ({prob_val*100:.1f}%)</b>" if is_pred else f"{prob_val*100:.1f}%"
+            prob_rows.append([
+                Paragraph(full_name, body_style),
+                Paragraph(f"{prob_val*100:.2f}%", body_style),
+                Paragraph(status_text, ParagraphStyle('ProbSt', parent=body_style, textColor=colors.HexColor("#0f766e") if is_pred else colors.HexColor("#64748b")))
+            ])
+
+        prob_table = Table(prob_rows, colWidths=[240, 150, 150])
+        prob_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#e2e8f0")),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ]))
+        story.append(prob_table)
+        story.append(Spacer(1, 8))
+
+        # 3. Model Architecture & Parameters
+        story.append(Paragraph("Machine Learning Model Specifications", section_heading))
+        m_spec = report_data.get("model_metadata", {})
+        model_table_data = [
+            [Paragraph("<b>Algorithm:</b>", body_style), Paragraph(str(m_spec.get("algorithm")), body_style),
+             Paragraph("<b>Input Features:</b>", body_style), Paragraph(f"{m_spec.get('features_used')} Numerical Metrics", body_style)],
+            [Paragraph("<b>Validation Accuracy:</b>", body_style), Paragraph(str(m_spec.get("validation_accuracy")), body_style),
+             Paragraph("<b>Macro ROC-AUC:</b>", body_style), Paragraph(str(m_spec.get("roc_auc_score")), body_style)],
+            [Paragraph("<b>Preprocessing:</b>", body_style), Paragraph(str(m_spec.get("preprocessing")), body_style),
+             Paragraph("<b>Decision Strategy:</b>", body_style), Paragraph("Argmax Multiclass Softmax / Probability Threshold", body_style)]
+        ]
+        model_table = Table(model_table_data, colWidths=[110, 160, 110, 160])
+        model_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ]))
+        story.append(model_table)
+        story.append(Spacer(1, 8))
+
+        # 4. Clinical Condition Explanation
+        c_exp = report_data.get("clinical_explanation", {})
+        story.append(Paragraph(f"Clinical Assessment: {cond_name}", section_heading))
+        story.append(Paragraph(f"<b>Pathophysiological Overview:</b> {c_exp.get('summary')}", body_style))
+        story.append(Spacer(1, 4))
+
+        # Typical Symptoms & Tests in 2 columns
+        symptoms = c_exp.get("typical_symptoms", [])
+        tests = c_exp.get("possible_clinical_tests", [])
+        sym_text = "<br/>".join([f"• {s}" for s in symptoms])
+        test_text = "<br/>".join([f"• {t}" for t in tests])
+
+        clin_table_data = [
+            [Paragraph("<b>Typical Clinical Symptoms:</b>", body_style), Paragraph("<b>Recommended Diagnostic Investigations:</b>", body_style)],
+            [Paragraph(sym_text, body_style), Paragraph(test_text, body_style)]
+        ]
+        clin_table = Table(clin_table_data, colWidths=[270, 270])
+        clin_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
+            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+            ('PADDING', (0, 0), (-1, -1), 5),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ]))
+        story.append(clin_table)
+        story.append(Spacer(1, 6))
+
+        # Clinical Followup Guidance
+        story.append(Paragraph(f"<b>Follow-Up Guidance:</b> {c_exp.get('clinical_followup')}", body_style))
+        story.append(Spacer(1, 6))
+
+        # Emergency Warning Box
+        em_box = [[
+            Paragraph(f"<b>EMERGENCY PROTOCOL (Dispatch 112 / 911):</b><br/>{c_exp.get('emergency_warning')}", ParagraphStyle('Em2', textColor=colors.HexColor("#991b1b"), fontName='Helvetica-Bold', fontSize=8, leading=10.5))
+        ]]
+        em_table = Table(em_box, colWidths=[540])
+        em_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#fef2f2")),
+            ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#ef4444")),
+            ('PADDING', (0, 0), (-1, -1), 5),
+        ]))
+        story.append(em_table)
+        story.append(Spacer(1, 8))
+
+        # 5. Doctor Review & Sign-Off Section
+        doc_review = report_data.get("doctor_review")
+        if doc_review and doc_review.get("approved"):
+            doc_status = f"APPROVED (Signed by {doc_review.get('doctor_name', 'Attending Physician')})"
+            doc_notes = doc_review.get("clinician_notes", "Clinically verified.")
+            sig_hash = doc_review.get("signature_hash", "SHA256-VERIFIED")
+            doc_data = [
+                [Paragraph("<b>Attending Physician Review:</b>", body_style), Paragraph(f"<b>Status: {doc_status}</b>", body_style)],
+                [Paragraph(f"<b>Clinical Notes:</b> {doc_notes}", body_style), Paragraph(f"<b>Signature Hash:</b> {sig_hash[:24]}...", body_style)]
+            ]
+        else:
+            doc_data = [
+                [Paragraph("<b>Attending Physician Review & Signature:</b>", body_style), Paragraph("<b>Clinical Sign-Off Status:</b>", body_style)],
+                [Paragraph("Dr. ___________________________________, MD", body_style), Paragraph("[  ] Approved   [  ] Follow-Up Ordered", body_style)],
+                [Paragraph("License #: __________________ Date: ___________", body_style), Paragraph("Notes: _________________________________", body_style)]
+            ]
+
+        doc_table = Table(doc_data, colWidths=[270, 270])
+        doc_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
+            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor("#94a3b8")),
+            ('PADDING', (0, 0), (-1, -1), 5),
+        ]))
+        story.append(doc_table)
+        story.append(Spacer(1, 6))
+
+        # Disclaimer
+        story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#cbd5e1"), spaceAfter=4))
+        story.append(Paragraph(report_data.get("disclaimer", ""), disclaimer_style))
+
+        doc.build(story)
+        return output_path

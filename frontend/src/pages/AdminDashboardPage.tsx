@@ -5,7 +5,7 @@ import { useToast } from '../context/ToastContext';
 import {
   Shield, Users, Stethoscope, AlertTriangle, Activity, Database,
   FileText, Clock, CheckCircle2, XCircle, Search, Filter, RefreshCw,
-  UserCheck, AlertOctagon, Terminal, Server
+  UserCheck, AlertOctagon, Terminal, Server, Calendar, Phone, Mail, Award, Building, UserX
 } from 'lucide-react';
 
 export const AdminDashboardPage: React.FC = () => {
@@ -13,22 +13,34 @@ export const AdminDashboardPage: React.FC = () => {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [pendingDoctors, setPendingDoctors] = useState<any[]>([]);
+  const [allAdminDoctors, setAllAdminDoctors] = useState<any[]>([]);
+  const [patientsList, setPatientsList] = useState<any[]>([]);
+  const [adminAppointments, setAdminAppointments] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'doctors' | 'audit'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'pending_doctors' | 'all_doctors' | 'patients' | 'appointments' | 'users' | 'doctors' | 'audit'>('overview');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [statsData, usersData, logsData] = await Promise.all([
+      const [statsData, usersData, logsData, pendingDocs, allDocs, pts, appts] = await Promise.all([
         api.getAdminStats(),
         api.getAdminUsers(),
         api.getGlobalAuditLogs(50),
+        api.getPendingDoctors().catch(() => []),
+        api.getAllDoctorsAdmin().catch(() => []),
+        api.getAllPatientsAdmin().catch(() => []),
+        api.getAdminAppointments().catch(() => []),
       ]);
       setStats(statsData);
       setUsers(usersData);
       setAuditLogs(logsData);
+      setPendingDoctors(pendingDocs || []);
+      setAllAdminDoctors(allDocs || []);
+      setPatientsList(pts || []);
+      setAdminAppointments(appts || []);
     } catch (err: any) {
       showToast('Error Loading Admin Console', err.message, 'error');
     } finally {
@@ -39,6 +51,20 @@ export const AdminDashboardPage: React.FC = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleApproveDoctor = async (doctorId: number, action: 'approve' | 'reject' | 'suspend') => {
+    try {
+      await api.approveDoctor(doctorId, action);
+      showToast(
+        action === 'approve' ? 'Physician Approved' : action === 'reject' ? 'Physician Registration Rejected' : 'Physician Suspended',
+        `Doctor account status updated.`,
+        'success'
+      );
+      await loadData();
+    } catch (err: any) {
+      showToast('Approval Action Failed', err.message, 'error');
+    }
+  };
 
   const handleToggleUserStatus = async (user: any) => {
     try {
@@ -182,23 +208,29 @@ export const AdminDashboardPage: React.FC = () => {
       )}
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
         {[
-          { key: 'overview', label: 'Platform Metrics & Health' },
-          { key: 'users', label: `User Directory (${users.length})` },
-          { key: 'doctors', label: `Physician Licensing (${doctorsList.length})` },
+          { key: 'overview', label: 'Platform Telemetry' },
+          { key: 'pending_doctors', label: `Pending Approvals (${pendingDoctors.length})`, badge: pendingDoctors.length > 0 },
+          { key: 'all_doctors', label: `Physicians Directory (${allAdminDoctors.length || doctorsList.length})` },
+          { key: 'patients', label: `Patients Registry (${patientsList.length})` },
+          { key: 'appointments', label: `Appointments (${adminAppointments.length})` },
+          { key: 'users', label: `All Users (${users.length})` },
           { key: 'audit', label: `Audit Trail (${auditLogs.length})` },
         ].map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key as any)}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
               activeTab === tab.key
                 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-lg shadow-cyan-500/10'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
             }`}
           >
             {tab.label}
+            {tab.badge && (
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+            )}
           </button>
         ))}
       </div>
@@ -496,6 +528,339 @@ export const AdminDashboardPage: React.FC = () => {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Tab Content: Pending Doctor Approvals */}
+      {activeTab === 'pending_doctors' && (
+        <div className="glass-panel p-6 rounded-3xl border border-slate-700/60 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-4">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Stethoscope className="w-5 h-5 text-amber-400" />
+                Pending Doctor Registrations Awaiting Approval
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                New physician accounts cannot log in until approved by a system administrator. Review qualifications and clinical background below.
+              </p>
+            </div>
+            <span className="text-xs font-mono text-amber-400 bg-amber-500/10 border border-amber-500/30 px-3 py-1 rounded-full self-start">
+              {pendingDoctors.length} Pending Review
+            </span>
+          </div>
+
+          {pendingDoctors.length === 0 ? (
+            <div className="py-12 text-center text-slate-400 space-y-3 font-mono">
+              <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
+              <p className="text-sm">All registered doctors have been reviewed.</p>
+              <p className="text-xs text-slate-500">No physician registrations currently require administrative sign-off.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {pendingDoctors.map((doc) => (
+                <div key={doc.id} className="p-5 rounded-2xl bg-slate-900/80 border border-amber-500/30 shadow-xl space-y-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="font-bold text-white text-base">{doc.full_name}</div>
+                      <div className="text-xs text-slate-400 font-mono flex items-center gap-2 mt-0.5">
+                        <Mail className="w-3.5 h-3.5 text-teal-400" />
+                        {doc.email}
+                      </div>
+                      {doc.phone_number && (
+                        <div className="text-xs text-slate-400 font-mono flex items-center gap-2 mt-0.5">
+                          <Phone className="w-3.5 h-3.5 text-indigo-400" />
+                          {doc.phone_number}
+                        </div>
+                      )}
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      APPROVAL REQUIRED
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 text-xs bg-slate-950/70 p-3.5 rounded-xl border border-slate-800">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 flex items-center gap-1.5">
+                        <Award className="w-3.5 h-3.5 text-cyan-400" />
+                        Specialization:
+                      </span>
+                      <span className="font-semibold text-white">{doc.specialization || doc.specialty || 'Cardiologist'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 flex items-center gap-1.5">
+                        <Building className="w-3.5 h-3.5 text-emerald-400" />
+                        Hospital / Clinic:
+                      </span>
+                      <span className="font-semibold text-slate-200">{doc.hospital_name || 'Hospital Affiliate'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">Qualification:</span>
+                      <span className="font-mono text-cyan-300">{doc.qualification || 'MBBS, MD'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">Clinical Experience:</span>
+                      <span className="font-mono text-slate-200">{doc.experience_years ? `${doc.experience_years} years` : 'Experienced'}</span>
+                    </div>
+                    {doc.consultation_fee && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">Consultation Fee:</span>
+                        <span className="font-mono text-emerald-400">${doc.consultation_fee}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-800/80">
+                    <button
+                      onClick={() => handleApproveDoctor(doc.id, 'reject')}
+                      className="px-4 py-2 rounded-xl text-xs font-semibold bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition"
+                    >
+                      Reject Application
+                    </button>
+                    <button
+                      onClick={() => handleApproveDoctor(doc.id, 'approve')}
+                      className="px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-lg shadow-emerald-500/20 transition flex items-center gap-1.5"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Approve Doctor Registration
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab Content: All Doctors */}
+      {activeTab === 'all_doctors' && (
+        <div className="glass-panel p-6 rounded-3xl border border-slate-700/60 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Stethoscope className="w-5 h-5 text-teal-400" />
+                Medical Staff Directory & Credentials
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Manage registered physicians, review credentials, suspend or restore practice privileges.
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-slate-800 uppercase tracking-wider text-[11px] font-mono text-slate-400">
+                  <th className="py-3 px-4">Physician</th>
+                  <th className="py-3 px-4">Specialization</th>
+                  <th className="py-3 px-4">Hospital / Clinic</th>
+                  <th className="py-3 px-4">Approval Status</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {(allAdminDoctors.length > 0 ? allAdminDoctors : doctorsList).map((doc) => {
+                  const isApproved = doc.is_approved ?? doc.doctor_profile?.is_approved ?? true;
+                  return (
+                    <tr key={doc.id} className="hover:bg-slate-800/30 transition">
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-white">{doc.full_name || 'Dr. Physician'}</div>
+                        <div className="text-[11px] text-slate-400 font-mono">{doc.email}</div>
+                      </td>
+                      <td className="py-3 px-4 text-slate-300">
+                        {doc.specialization || doc.specialty || 'Cardiologist'}
+                      </td>
+                      <td className="py-3 px-4 text-slate-300">
+                        {doc.hospital_name || doc.hospital_affiliation || 'Metropolitan Heart & Vascular Institute'}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase inline-flex items-center gap-1 ${
+                            isApproved
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                              : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                          }`}
+                        >
+                          {isApproved ? 'Approved & Active' : 'Pending Approval'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        {isApproved ? (
+                          <button
+                            onClick={() => handleApproveDoctor(doc.id, 'suspend')}
+                            className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition"
+                          >
+                            Suspend Access
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleApproveDoctor(doc.id, 'approve')}
+                            className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition"
+                          >
+                            Approve
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Tab Content: Patients Registry */}
+      {activeTab === 'patients' && (
+        <div className="glass-panel p-6 rounded-3xl border border-slate-700/60 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Users className="w-5 h-5 text-cyan-400" />
+                Patient Cohort & Health Assessment Status
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Surveillance of enrolled patients, clinical demographic indicators, and completion of mandatory medical report assessments.
+              </p>
+            </div>
+            <span className="text-xs font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 px-3 py-1 rounded-full self-start">
+              {patientsList.length} Patients Enrolled
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-slate-800 uppercase tracking-wider text-[11px] font-mono text-slate-400">
+                  <th className="py-3 px-4">Patient Name</th>
+                  <th className="py-3 px-4">Demographics</th>
+                  <th className="py-3 px-4">Contact</th>
+                  <th className="py-3 px-4">Medical Assessment</th>
+                  <th className="py-3 px-4">Account Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {patientsList.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-slate-500 font-mono">
+                      No patients enrolled yet.
+                    </td>
+                  </tr>
+                ) : (
+                  patientsList.map((pt) => (
+                    <tr key={pt.id} className="hover:bg-slate-800/30 transition">
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-white">{pt.full_name}</div>
+                        <div className="text-[11px] text-slate-400 font-mono">{pt.email}</div>
+                      </td>
+                      <td className="py-3 px-4 text-slate-300">
+                        {pt.age ? `${pt.age} yrs` : 'Age N/A'} • {pt.gender || 'Not specified'}
+                      </td>
+                      <td className="py-3 px-4 font-mono text-slate-300">
+                        {pt.phone_number || 'No phone'}
+                      </td>
+                      <td className="py-3 px-4">
+                        {pt.assessment_complete ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                            Completed (Unlocked)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            <Clock className="w-3 h-3 text-amber-400" />
+                            Pending Report Upload
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`text-[11px] font-semibold ${pt.is_active ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {pt.is_active ? 'Active' : 'Suspended'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Tab Content: Platform Consultations */}
+      {activeTab === 'appointments' && (
+        <div className="glass-panel p-6 rounded-3xl border border-slate-700/60 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-indigo-400" />
+                Platform Appointments & Teleconsultations
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Centralized oversight of all scheduled, pending, and completed doctor appointments.
+              </p>
+            </div>
+            <span className="text-xs font-mono text-indigo-400 bg-indigo-500/10 border border-indigo-500/30 px-3 py-1 rounded-full self-start">
+              {adminAppointments.length} Bookings
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-slate-800 uppercase tracking-wider text-[11px] font-mono text-slate-400">
+                  <th className="py-3 px-4">Patient</th>
+                  <th className="py-3 px-4">Attending Doctor</th>
+                  <th className="py-3 px-4">Date & Time</th>
+                  <th className="py-3 px-4">Consultation Type</th>
+                  <th className="py-3 px-4">Booking Status</th>
+                  <th className="py-3 px-4">Clinical Reason</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {adminAppointments.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-slate-500 font-mono">
+                      No appointments booked yet.
+                    </td>
+                  </tr>
+                ) : (
+                  adminAppointments.map((app) => (
+                    <tr key={app.id} className="hover:bg-slate-800/30 transition">
+                      <td className="py-3 px-4 font-bold text-white">
+                        {app.patient_name || (app.patient ? app.patient.full_name : `Patient #${app.patient_id}`)}
+                      </td>
+                      <td className="py-3 px-4 text-slate-200">
+                        {app.doctor_name || (app.doctor ? app.doctor.full_name : `Doctor #${app.doctor_id}`)}
+                      </td>
+                      <td className="py-3 px-4 font-mono text-cyan-300">
+                        {new Date(app.appointment_date).toLocaleString()}
+                      </td>
+                      <td className="py-3 px-4 font-mono text-slate-300 capitalize">
+                        {app.appointment_type || 'Telehealth'}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase ${
+                            app.status === 'scheduled' || app.status === 'approved'
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                              : app.status === 'completed'
+                              ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                              : app.status === 'rejected' || app.status === 'cancelled'
+                              ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                              : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                          }`}
+                        >
+                          {app.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-400 max-w-xs truncate">
+                        {app.reason || 'General Follow-up'}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

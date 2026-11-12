@@ -3,15 +3,18 @@ import { User, AuthState } from '../types';
 import { api } from '../services/api';
 
 interface AuthContextType extends AuthState {
+  assessmentComplete: boolean | null;
   login: (email: string, password: string) => Promise<void>;
   register: (data: { email: string; password: string; full_name: string; role: string }) => Promise<void>;
   logout: () => void;
   quickDemoLogin: (email: string, password?: string) => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [assessmentComplete, setAssessmentComplete] = useState<boolean | null>(null);
   const [state, setState] = useState<AuthState>({
     user: null,
     token: localStorage.getItem('cardiopulse_token'),
@@ -20,6 +23,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isAuthenticated: false,
     isLoading: true,
   });
+
+  const refreshProfile = async () => {
+    try {
+      const token = localStorage.getItem('cardiopulse_token');
+      if (!token) return;
+      const user = await api.getMe();
+      if (user.role === 'patient') {
+        try {
+          const patProfile = await api.getPatientProfile();
+          setAssessmentComplete(Boolean(patProfile.assessment_complete));
+        } catch {
+          setAssessmentComplete(false);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   const checkAuth = async () => {
     const token = localStorage.getItem('cardiopulse_token');
@@ -30,6 +51,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const user = await api.getMe();
+      if (user.role === 'patient') {
+        try {
+          const patProfile = await api.getPatientProfile();
+          setAssessmentComplete(Boolean(patProfile.assessment_complete));
+        } catch {
+          setAssessmentComplete(false);
+        }
+      }
       setState(prev => ({
         ...prev,
         user,
@@ -49,6 +78,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: false,
         isLoading: false,
       }));
+      setAssessmentComplete(null);
     }
   };
 
@@ -61,6 +91,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('cardiopulse_token', res.access_token);
     if (res.patient_id) localStorage.setItem('cardiopulse_patient_id', String(res.patient_id));
     if (res.doctor_id) localStorage.setItem('cardiopulse_doctor_id', String(res.doctor_id));
+
+    if (res.role === 'patient') {
+      try {
+        const patProfile = await api.getPatientProfile();
+        setAssessmentComplete(Boolean(patProfile.assessment_complete));
+      } catch {
+        setAssessmentComplete(false);
+      }
+    }
 
     setState({
       user: {
@@ -114,6 +153,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isAuthenticated: false,
       isLoading: false,
     });
+    setAssessmentComplete(null);
   };
 
   const quickDemoLogin = async (email: string, password?: string) => {
@@ -122,7 +162,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ ...state, login, register, logout, quickDemoLogin }}>
+    <AuthContext.Provider value={{ ...state, assessmentComplete, login, register, logout, quickDemoLogin, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 
 # Auth Schemas
@@ -419,9 +419,225 @@ class AdminStatsOut(BaseModel):
     total_analyses: int
     total_reports: int
     total_emergency_alerts: int
+    total_ecg_predictions: int = 0
+    prediction_class_distribution: Dict[str, int] = {}
     alert_distribution: Dict[str, int]
     system_status: str
+    model_status: str = "Active"
     api_version: str
     database_connected: bool
     uptime_seconds: float
+
+# ==============================================================================
+# ECG Machine Learning Prediction Schemas
+# ==============================================================================
+
+class ECGPredictionCreate(BaseModel):
+    patient_id: int
+    feature_values: Dict[str, float] = Field(..., description="Map of 54 numerical ECG features (feature_1 to feature_54)")
+    notes: Optional[str] = None
+
+class PrescriptionAnalysisRequest(BaseModel):
+    patient_id: int
+    prescription_text: Optional[str] = None
+    heart_rate: Optional[float] = None
+    blood_pressure: Optional[str] = None
+    pr_interval_ms: Optional[float] = None
+    qrs_duration_ms: Optional[float] = None
+    qt_interval_ms: Optional[float] = None
+    st_segment: Optional[str] = "Normal"
+    symptoms: Optional[List[str]] = None
+    prescribed_medications: Optional[str] = None
+    clinical_notes: Optional[str] = None
+    condition_preset: Optional[str] = None
+    manual_features: Optional[Dict[str, float]] = None
+
+class ECGPredictionOut(BaseModel):
+    id: int
+    patient_id: int
+    patient_name: Optional[str] = None
+    patient_code: Optional[str] = None
+    patient_age: Optional[int] = None
+    patient_sex: Optional[str] = None
+    predicted_class: str # 'ARR', 'AFF', 'CHF', 'NSR'
+    condition_name: str # 'Arrhythmia', 'Atrial Fibrillation', etc.
+    confidence_score: float
+    probabilities: Dict[str, float]
+    feature_values: Dict[str, float]
+    model_name: str = "Extra Trees Classifier"
+    model_version: str = "v1.0-champion"
+    notes: Optional[str] = None
+    created_at: datetime
+    clinical_summary: Optional[Dict[str, Any]] = None
+    report_id: Optional[int] = None
+    prescription_analysis: Optional[Dict[str, Any]] = None
+
+    class Config:
+        from_attributes = True
+
+class ModelInfoOut(BaseModel):
+    champion_name: str
+    n_features: int
+    classes: List[str]
+    test_metrics: Dict[str, Any]
+    hyperparameters: Dict[str, Any]
+    feature_names: List[str]
+    preprocessing_metadata: Dict[str, Any]
+
+class CSVParsedSample(BaseModel):
+    sample_index: int
+    label: Optional[str] = None
+    features: Dict[str, float]
+
+class CSVParsedResponse(BaseModel):
+    total_samples: int
+    samples: List[CSVParsedSample]
+
+# ==============================================================================
+# Patient CRUD Schemas
+# ==============================================================================
+
+class PatientCreate(BaseModel):
+    full_name: str
+    email: Optional[str] = None
+    age: Optional[int] = None
+    sex: Optional[str] = "Unknown"
+    date_of_birth: Optional[str] = None
+    height_cm: Optional[float] = None
+    weight_kg: Optional[float] = None
+    phone: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+    emergency_contact_relation: Optional[str] = None
+    smoking_habit: Optional[str] = "non-smoker"
+    alcohol_consumption: Optional[str] = "none"
+    physical_activity_level: Optional[str] = "moderate"
+    has_heart_disease: bool = False
+    high_blood_pressure: bool = False
+    diabetes: bool = False
+    medical_notes: Optional[str] = None
+
+class PatientUpdate(BaseModel):
+    full_name: Optional[str] = None
+    age: Optional[int] = None
+    sex: Optional[str] = None
+    height_cm: Optional[float] = None
+    weight_kg: Optional[float] = None
+    phone: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+    emergency_contact_relation: Optional[str] = None
+    smoking_habit: Optional[str] = None
+    alcohol_consumption: Optional[str] = None
+    physical_activity_level: Optional[str] = None
+
+class PatientListOut(BaseModel):
+    id: int
+    patient_id_code: str
+    full_name: str
+    email: Optional[str] = ""
+    age: Optional[int] = None
+    sex: Optional[str] = None
+    phone: Optional[str] = None
+    prediction_count: int = 0
+    latest_prediction_class: Optional[str] = None
+    latest_prediction_date: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# ==============================================================================
+# Authentication Password Reset Schemas
+# ==============================================================================
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    reset_token: str
+    new_password: str = Field(..., min_length=6)
+
+# ==============================================================================
+# Upgraded Role-Based Registration & Clinical Workflow Schemas
+# ==============================================================================
+
+class DoctorRegister(BaseModel):
+    full_name: str
+    email: str
+    phone_number: str
+    password: str = Field(..., min_length=8)
+    specialization: str
+    qualification: str
+    experience_years: int
+    hospital_name: str
+    profile_picture: Optional[str] = None
+    availability: Optional[Dict[str, Any]] = None
+    consultation_fee: Optional[float] = None
+
+class PatientRegister(BaseModel):
+    full_name: str
+    email: str
+    phone_number: str
+    password: str = Field(..., min_length=8)
+    age: int
+    gender: Literal["Male", "Female", "Other"]
+    address: str
+    medical_history: Optional[Dict[str, Any]] = None
+
+class DoctorApprovalRequest(BaseModel):
+    action: Literal["approve", "reject", "suspend", "activate"]
+    reason: Optional[str] = None
+
+class PrescriptionCreate(BaseModel):
+    patient_id: int
+    appointment_id: Optional[int] = None
+    patient_condition: str
+    clinical_assessment: str
+    medicines: List[Dict[str, Any]]  # [{name, dosage, frequency, duration, instructions}]
+    lifestyle_recommendations: Optional[str] = None
+    diet_recommendations: Optional[str] = None
+    exercise_recommendations: Optional[str] = None
+    followup_date: Optional[str] = None
+    doctor_notes: Optional[str] = None
+
+class PrescriptionOut(BaseModel):
+    id: int
+    patient_id: int
+    doctor_id: int
+    appointment_id: Optional[int] = None
+    patient_condition: str
+    clinical_assessment: str
+    medicines: List[Dict[str, Any]]
+    lifestyle_recommendations: Optional[str] = None
+    diet_recommendations: Optional[str] = None
+    exercise_recommendations: Optional[str] = None
+    followup_date: Optional[str] = None
+    doctor_notes: Optional[str] = None
+    pdf_filename: Optional[str] = None
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+class DoctorOut(BaseModel):
+    id: int
+    user_id: int
+    full_name: str
+    email: str
+    specialty: str
+    qualification: Optional[str] = None
+    experience_years: Optional[int] = None
+    hospital_name: Optional[str] = None
+    phone_number: Optional[str] = None
+    profile_picture: Optional[str] = None
+    availability: Optional[Dict[str, Any]] = None
+    consultation_fee: Optional[float] = None
+    is_approved: bool = False
+    verified: bool = False
+    created_at: Optional[datetime] = None
+    class Config:
+        from_attributes = True
+
+
 
